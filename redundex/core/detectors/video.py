@@ -3,6 +3,7 @@ import subprocess
 
 import numpy
 
+from ..types import Match, MatchReason
 from .imagehash import hamming, hash_gray_frame
 
 FRAME_W, FRAME_H = 160, 90
@@ -155,3 +156,47 @@ def containment_candidates(videos, min_hits=8, max_bucket=200):
                 pair = (ordered[i], ordered[j])
                 counts[pair] = counts.get(pair, 0) + 1
     return {pair for pair, c in counts.items() if c >= min_hits}
+
+
+def _format_timecode(seconds):
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
+
+
+def match_videos(fps, video_similarity=0.90, containment_similarity=0.85,
+                 frame_threshold=6):
+    sigs = {p: coarse_signature(v["hashes"]) for p, v in fps.items()}
+    pairs = coarse_candidates(sigs) | containment_candidates(
+        {p: v["hashes"] for p, v in fps.items()}
+    )
+    matches = []
+    for a, b in sorted(pairs):
+        va, vb = fps[a], fps[b]
+        sim = aligned_similarity(va["hashes"], vb["hashes"], frame_threshold)
+        if sim >= video_similarity:
+            matches.append(
+                Match(
+                    a=a, b=b, reason=MatchReason.PERCEPTUAL, score=sim,
+                    detail=f"sequence similarity {sim:.2f}",
+                )
+            )
+            continue
+        short_p, long_p = (a, b) if va["duration"] <= vb["duration"] else (b, a)
+        short, long_v = fps[short_p], fps[long_p]
+        if not short["hashes"] or len(long_v["hashes"]) < len(short["hashes"]):
+            continue
+        wsim, offset = best_window(
+            short["hashes"], long_v["hashes"], frame_threshold
+        )
+        if wsim >= containment_similarity:
+            step = long_v["duration"] / max(len(long_v["hashes"]), 1)
+            at = offset * step
+            matches.append(
+                Match(
+                    a=short_p, b=long_p, reason=MatchReason.CONTAINED_IN,
+                    score=wsim,
+                    detail=f"at {_format_timecode(at)}",
+                )
+            )
+    return matches

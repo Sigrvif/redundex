@@ -1,3 +1,6 @@
+import shutil
+import subprocess
+
 import pytest
 
 from redundex.core.detectors.video import (
@@ -5,7 +8,10 @@ from redundex.core.detectors.video import (
     best_window,
     coarse_signature,
     frames_agree,
+    match_videos,
+    video_job,
 )
+from redundex.core.types import MatchReason
 
 
 def _h(n):
@@ -60,3 +66,59 @@ def test_coarse_signature_positions():
     sparse = [f(t) for t in range(0, 31, 2)]
     assert len(coarse_signature(dense)) == 16
     assert coarse_signature(dense) == coarse_signature(sparse)
+
+
+ffmpeg = pytest.mark.skipif(
+    not (shutil.which("ffmpeg") and shutil.which("ffprobe")),
+    reason="ffmpeg/ffprobe not installed",
+)
+
+
+def _make(path, duration=20, size="320x240", src="testsrc", extra=()):
+    cmd = ["ffmpeg", "-v", "error", "-f", "lavfi",
+           "-i", f"{src}=duration={duration}:size={size}:rate=10"]
+    cmd.extend(extra)
+    cmd.extend(["-pix_fmt", "yuv420p", str(path)])
+    subprocess.run(cmd, check=True)
+    return str(path)
+
+
+def _fp(path, interval=5.0):
+    p, duration, hashes, w, h = video_job(path, interval=interval)
+    return p, {"duration": duration, "hashes": hashes, "width": w, "height": h}
+
+
+@ffmpeg
+def test_same_content_different_resolution(tmp_path):
+    big = _make(tmp_path / "big.mp4", duration=40, size="640x480")
+    small = _make(tmp_path / "small.mp4", duration=40, size="320x240")
+    fps = dict([_fp(big), _fp(small)])
+    matches = match_videos(fps, video_similarity=0.90, containment_similarity=0.85)
+    assert len(matches) == 1
+    assert matches[0].reason is MatchReason.PERCEPTUAL
+
+
+@ffmpeg
+def test_clip_contained_with_offset(tmp_path):
+    full = _make(tmp_path / "full.mp4", duration=40, size="320x240", src="mandelbrot")
+    clip = str(tmp_path / "clip.mp4")
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", "5", "-t", "10", "-i", full,
+         "-pix_fmt", "yuv420p", clip],
+        check=True,
+    )
+    fps = dict([_fp(full), _fp(clip)])
+    matches = match_videos(fps, video_similarity=0.90, containment_similarity=0.85)
+    assert len(matches) == 1
+    m = matches[0]
+    assert m.reason is MatchReason.CONTAINED_IN
+    assert m.a == clip and m.b == full
+    assert "at " in m.detail
+
+
+@ffmpeg
+def test_unrelated_videos_do_not_match(tmp_path):
+    a = _make(tmp_path / "a.mp4", duration=30, src="testsrc")
+    b = _make(tmp_path / "b.mp4", duration=30, src="testsrc2")
+    fps = dict([_fp(a), _fp(b)])
+    assert match_videos(fps, video_similarity=0.90, containment_similarity=0.85) == []
