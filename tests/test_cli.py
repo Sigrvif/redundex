@@ -43,3 +43,16 @@ def test_scan_no_exact_flag(make_tree, tmp_path, capsys):
     data = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert "exact" not in data["stats"]
     assert data["groups"] == []
+
+
+def test_move_and_undo_commands(make_tree, tmp_path, capsys):
+    root = make_tree({"a/one.txt": b"1", "two.txt": b"2"})
+    coll = tmp_path / "coll"
+    rc = main(["move", str(coll), str(root / "a/one.txt"), str(root / "two.txt")])
+    assert rc == 0
+    assert (coll / "a/one.txt").exists() and (coll / "two.txt").exists()
+    rc = main(["undo", str(coll)])
+    assert rc == 0
+    assert (root / "a/one.txt").exists() and (root / "two.txt").exists()
+    out = capsys.readouterr().out
+    assert "restored" in out

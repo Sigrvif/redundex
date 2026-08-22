@@ -5,6 +5,7 @@ import os
 import sys
 
 from .scan import Scan
+from .trash import move_batch, undo_last
 from .types import ScanConfig
 
 
@@ -45,7 +46,28 @@ def main(argv=None):
     p.add_argument("--json", action="store_true")
     for det in ("exact", "image", "video", "audio", "docs"):
         p.add_argument(f"--no-{det}", action="store_true")
+    p = sub.add_parser("move", help="move files to the collection folder")
+    p.add_argument("collection")
+    p.add_argument("paths", nargs="+")
+    p = sub.add_parser("undo", help="undo the last move batch")
+    p.add_argument("collection")
     args = parser.parse_args(argv)
+
+    if args.cmd == "move":
+        root = os.path.commonpath([os.path.abspath(p) for p in args.paths])
+        manifest, moved, failed = move_batch(args.paths, args.collection, root=root)
+        print(f"moved {len(moved)} file(s), {len(failed)} failed")
+        print(f"manifest: {manifest}")
+        for f in failed:
+            print(f"    failed: {f['path']}: {f['error']}")
+        return 0 if not failed else 1
+
+    if args.cmd == "undo":
+        outcome = undo_last(args.collection)
+        print(
+            f"restored {outcome['restored']}, remaining {outcome['remaining']}"
+        )
+        return 0
 
     if args.cmd == "scan" and not os.path.isdir(args.folder):
         parser.error(f"folder does not exist: {args.folder}")
