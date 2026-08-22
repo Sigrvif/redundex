@@ -3,6 +3,8 @@ import time
 
 from . import match as matching
 from .detectors import exact
+from .detectors.image import match_images
+from .detectors.imagehash import from_signed64, image_job, to_signed64
 from .hashstore import HashStore
 from .pool import CancelledScan, run_jobs
 from .types import FileKind, ScanConfig, ScanResult
@@ -56,6 +58,12 @@ class Scan:
                 result.cancelled = True
                 return result
 
+            if cfg.image:
+                self._image_stage(store, entries, matches, quality, result)
+                if self._cancelled():
+                    result.cancelled = True
+                    return result
+
             self._progress("group", 0, 1)
             result.groups = matching.build_groups(entries, matches, quality)
             result.stats["groups"] = len(result.groups)
@@ -106,6 +114,55 @@ class Scan:
         matches.extend(stage_matches)
         result.stats["exact"] = {
             "candidates": len(candidates),
+            "hashed": len(rows),
+            "matches": len(stage_matches),
+            "seconds": round(time.monotonic() - t0, 3),
+        }
+
+    def _image_stage(self, store, entries, matches, quality, result):
+        cfg = self.config
+        t0 = time.monotonic()
+        images = [e for e in entries.values() if e.kind is FileKind.IMAGE]
+        cached = store.load("fp_image", entries)
+        missing = [e.path for e in images if e.path not in cached]
+        self._progress("image", 0, max(len(missing), 1))
+        rows, problems = run_jobs(
+            image_job,
+            missing,
+            workers=cfg.workers,
+            cancel_event=self.cancel_event,
+            progress_cb=lambda d, t: self._progress("image", d, t),
+        )
+        result.problems.extend(problems)
+        store.put(
+            "fp_image",
+            [
+                {
+                    "path": p,
+                    "phash": to_signed64(ph),
+                    "dhash": to_signed64(dh),
+                    "width": w,
+                    "height": h,
+                }
+                for p, ph, dh, w, h in rows
+            ],
+        )
+        fps = {
+            p: (
+                from_signed64(r["phash"]),
+                from_signed64(r["dhash"]),
+                r["width"],
+                r["height"],
+            )
+            for p, r in cached.items()
+        }
+        fps.update({p: (ph, dh, w, h) for p, ph, dh, w, h in rows})
+        stage_matches = match_images(fps, cfg.image_threshold)
+        matches.extend(stage_matches)
+        for p, (_ph, _dh, w, h) in fps.items():
+            quality[p] = float(w * h)
+        result.stats["image"] = {
+            "files": len(images),
             "hashed": len(rows),
             "matches": len(stage_matches),
             "seconds": round(time.monotonic() - t0, 3),

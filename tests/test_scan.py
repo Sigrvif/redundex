@@ -1,6 +1,9 @@
 import multiprocessing as mp
 import zipfile
 
+import numpy
+from PIL import Image
+
 from redundex.core.scan import Scan
 from redundex.core.types import ScanConfig
 
@@ -56,9 +59,48 @@ def test_scan_reports_stage_progress(make_tree, tmp_path_factory):
 
 def test_scan_cancelled_before_start(make_tree, tmp_path_factory):
     root = make_tree({"a.bin": b"q", "b.bin": b"q"})
-    cache = str(tmp_path_factory.mktemp("c") / "c.sqlite")
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
     ev = mp.Event()
     ev.set()
     result = Scan(root, _cfg(cache), cancel_event=ev).run()
     assert result.cancelled is True
     assert result.groups == []
+
+
+def _img(path, size, variant=0):
+    rng = numpy.random.default_rng(variant)
+    arr = numpy.zeros((size, size), dtype=numpy.uint8)
+    arr[:, : size // 2] = 70
+    arr[size // 3 : size // 2, size // 4 : 3 * size // 4] = 210
+    if variant:
+        arr = arr.astype(numpy.int16) + rng.integers(-8, 9, (size, size))
+        arr = numpy.clip(arr, 0, 255).astype(numpy.uint8)
+    Image.fromarray(arr).save(path)
+
+
+def _stripes(path, size):
+    y, x = numpy.mgrid[0:size, 0:size]
+    arr = ((x + y) % (size // 4) < size // 8).astype(numpy.uint8) * 255
+    Image.fromarray(arr).save(path)
+
+
+def test_scan_image_stage_groups_resizes(make_tree, tmp_path_factory):
+    root = make_tree({})
+    _img(root / "big.png", 256)
+    _img(root / "small.png", 64)
+    _stripes(root / "other.png", 128)
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = ScanConfig(cache_path=cache, video=False, audio=False, docs=False)
+    result = Scan(root, cfg).run()
+    assert len(result.groups) == 1
+    g = result.groups[0]
+    assert {m.path for m in g.members} == {
+        str(root / "big.png"), str(root / "small.png")
+    }
+    assert g.members[0].path == str(root / "big.png")
+    assert result.stats["image"]["hashed"] == 3
+    assert result.stats["image"]["matches"] == 1
+
+    result2 = Scan(root, cfg).run()
+    assert result2.stats["image"]["hashed"] == 0
+    assert len(result2.groups) == 1
