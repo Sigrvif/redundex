@@ -87,14 +87,14 @@ def test_fpcalc_raw_parses(tmp_path):
 @tools
 def test_same_track_different_format(tmp_path):
     wav = _make_audio(tmp_path / "track.wav")
-    ogg = str(tmp_path / "track.ogg")
+    flac = str(tmp_path / "track.flac")
     subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", wav, "-c:a", "libvorbis", ogg],
+        ["ffmpeg", "-v", "error", "-i", wav, "-c:a", "flac", flac],
         check=True,
     )
     fa = fpcalc_raw(wav)
-    fb = fpcalc_raw(ogg)
-    fps = {"track.wav": fa, "track.ogg": fb}
+    fb = fpcalc_raw(flac)
+    fps = {"track.wav": fa, "track.flac": fb}
     matches = match_audio(fps, ber_threshold=0.30)
     assert len(matches) == 1
     assert matches[0].reason is MatchReason.SAME_TRACK

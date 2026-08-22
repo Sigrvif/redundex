@@ -39,6 +39,7 @@ class Scan:
         except Exception as exc:
             result.problems.append({"path": "cache", "error": str(exc)})
             return result
+        entries = None
         try:
             self._progress("walk", 0, 1)
             if self._cancelled():
@@ -49,7 +50,6 @@ class Scan:
             )
             result.problems.extend(problems)
             entries = {e.path: e for e in entries_list}
-            store.save_files(entries)
             store.prune(set(entries))
             self._progress("walk", 1, 1)
             if self._cancelled():
@@ -98,6 +98,8 @@ class Scan:
             result.cancelled = True
             return result
         finally:
+            if entries is not None:
+                store.save_files(entries)
             store.close()
 
     def _exact_stage(self, store, entries, matches, result):
@@ -198,6 +200,14 @@ class Scan:
         cfg = self.config
         t0 = time.monotonic()
         videos = [e for e in entries.values() if e.kind is FileKind.VIDEO]
+        if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+            result.stats["video"] = {
+                "files": len(videos),
+                "hashed": 0,
+                "matches": 0,
+                "skipped": "ffmpeg/ffprobe not installed",
+            }
+            return
         cached = store.load("fp_video", entries)
         missing = [e.path for e in videos if e.path not in cached]
         self._progress("video", 0, max(len(missing), 1))

@@ -1,4 +1,5 @@
 import multiprocessing as mp
+import os
 import shutil
 import subprocess
 import zipfile
@@ -32,6 +33,22 @@ def test_scan_finds_exact_group_and_uses_cache(make_tree, tmp_path_factory):
     assert len(result2.groups) == 1
     assert result2.stats["exact"]["hashed"] == 0
     assert result2.stats["exact"]["matches"] == 1
+
+
+def test_scan_recomputes_modified_file(make_tree, tmp_path_factory):
+    root = make_tree({"a.bin": b"one", "b.bin": b"one"})
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = _cfg(cache)
+    result = Scan(root, cfg).run()
+    assert result.stats["exact"]["hashed"] == 2
+    assert len(result.groups) == 1
+
+    (root / "a.bin").write_bytes(b"two")
+    os.utime(root / "a.bin")
+    result2 = Scan(root, cfg).run()
+    assert result2.stats["exact"]["hashed"] == 1
+    assert result2.stats["exact"]["matches"] == 0
+    assert result2.groups == []
 
 
 def test_scan_matches_repacked_archives(make_tree, tmp_path_factory):
@@ -111,6 +128,18 @@ def test_scan_image_stage_groups_resizes(make_tree, tmp_path_factory):
     assert len(result2.groups) == 1
 
 
+def test_scan_video_stage_skips_without_tools(tmp_path, tmp_path_factory, monkeypatch):
+    import shutil as _shutil
+
+    monkeypatch.setattr(_shutil, "which", lambda name: None)
+    (tmp_path / "fake.mp4").write_bytes(b"x")
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = ScanConfig(cache_path=cache, image=False, audio=False, docs=False)
+    result = Scan(str(tmp_path), cfg).run()
+    assert result.stats["video"]["skipped"] == "ffmpeg/ffprobe not installed"
+    assert result.problems == []
+
+
 VIDEO_SKIP = pytest.mark.skipif(
     not shutil.which("ffmpeg"), reason="ffmpeg not installed"
 )
@@ -183,7 +212,7 @@ def test_scan_audio_stage(tmp_path, tmp_path_factory):
     )
     subprocess.run(
         ["ffmpeg", "-v", "error", "-i", str(tmp_path / "t.wav"),
-         "-c:a", "libvorbis", str(tmp_path / "t.ogg")],
+         "-c:a", "flac", str(tmp_path / "t.flac")],
         check=True,
     )
     cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")

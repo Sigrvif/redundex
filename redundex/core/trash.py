@@ -53,7 +53,6 @@ def latest_manifest(collection_dir):
 
 def move_batch(paths, collection_dir, root=None):
     os.makedirs(collection_dir, exist_ok=True)
-    manifest_path = _manifest_path(collection_dir)
     moved = []
     failed = []
     for src in paths:
@@ -69,10 +68,13 @@ def move_batch(paths, collection_dir, root=None):
             moved.append({"src": src, "dst": dest})
         except OSError as exc:
             failed.append({"path": src, "error": str(exc)})
-    _atomic_write_json(
-        manifest_path,
-        {"created": time.strftime("%Y-%m-%dT%H:%M:%S"), "moves": moved},
-    )
+    manifest_path = None
+    if moved:
+        manifest_path = _manifest_path(collection_dir)
+        _atomic_write_json(
+            manifest_path,
+            {"created": time.strftime("%Y-%m-%dT%H:%M:%S"), "moves": moved},
+        )
     return manifest_path, moved, failed
 
 

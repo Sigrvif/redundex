@@ -4,6 +4,7 @@ import json
 import os
 import sys
 
+from .capabilities import which_missing
 from .scan import Scan
 from .trash import move_batch, undo_last
 from .types import ScanConfig, format_size
@@ -54,7 +55,8 @@ def main(argv=None):
             parser.error("paths do not share a common root")
         manifest, moved, failed = move_batch(paths, args.collection, root=root)
         print(f"moved {len(moved)} file(s), {len(failed)} failed")
-        print(f"manifest: {manifest}")
+        if manifest is not None:
+            print(f"manifest: {manifest}")
         for f in failed:
             print(f"    failed: {f['path']}: {f['error']}")
         return 0 if not failed else 1
@@ -68,6 +70,11 @@ def main(argv=None):
 
     if args.cmd == "scan" and not os.path.isdir(args.folder):
         parser.error(f"folder does not exist: {args.folder}")
+
+    missing = which_missing()
+    if missing:
+        names = ", ".join(k for k in ("video", "audio", "pdf") if k in missing)
+        sys.stderr.write(f"note: detectors disabled (tools missing): {names}\n")
 
     cfg = ScanConfig(cache_path=args.cache)
     for det in ("exact", "image", "video", "audio", "docs"):

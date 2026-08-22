@@ -53,6 +53,14 @@ def test_manifest_sequence_numbers(make_tree, tmp_path):
     assert latest_manifest(str(coll)) == m2
 
 
+def test_move_nothing_writes_no_manifest(make_tree, tmp_path):
+    root = make_tree({"one.txt": b"1"})
+    coll = tmp_path / "coll"
+    manifest, moved, failed = move_batch([], str(coll))
+    assert manifest is None and moved == [] and failed == []
+    assert latest_manifest(str(coll)) is None
+
+
 def test_undo_restores_and_removes_manifest(make_tree, tmp_path):
     root = make_tree({"a/one.txt": b"1", "two.txt": b"2"})
     coll = tmp_path / "coll"
