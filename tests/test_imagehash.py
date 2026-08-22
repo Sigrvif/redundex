@@ -31,6 +31,13 @@ def _stripes(path, size):
     return str(path)
 
 
+def test_dct_matrix_orthonormal():
+    from redundex.core.detectors.imagehash import _DCT
+
+    err = numpy.abs(_DCT @ _DCT.T - numpy.eye(_DCT.shape[0])).max()
+    assert err < 1e-10
+
+
 def test_same_file_stable_hash(tmp_path):
     p = _blocks(tmp_path / "a.png", 256)
     assert phash_image(p) == phash_image(p)

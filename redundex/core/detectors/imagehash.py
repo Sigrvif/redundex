@@ -7,7 +7,7 @@ _SIZE = 32
 def _dct_matrix(n):
     k = numpy.arange(n).reshape(n, 1).astype(numpy.float64)
     i = numpy.arange(n).reshape(1, n).astype(numpy.float64)
-    m = numpy.cos(numpy.pi * (2 * k + 1) * i / (2 * n)) * numpy.sqrt(2.0 / n)
+    m = numpy.cos(numpy.pi * k * (2 * i + 1) / (2 * n)) * numpy.sqrt(2.0 / n)
     m[0, :] /= numpy.sqrt(2.0)
     return m
 
