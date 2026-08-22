@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "redundex"
+version = "0.1.0"
+description = "Find redundant files: duplicates, resizes, re-encodes, contained clips"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.6",
+    "Pillow>=10.0",
+    "numpy>=1.26",
+    "blake3>=1.0",
+    "py7zr>=0.21",
+    "pymupdf>=1.24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-qt>=4.4"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["redundex"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"
