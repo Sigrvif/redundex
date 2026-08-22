@@ -1,7 +1,10 @@
 import multiprocessing as mp
+import shutil
+import subprocess
 import zipfile
 
 import numpy
+import pytest
 from PIL import Image
 
 from redundex.core.scan import Scan
@@ -106,3 +109,35 @@ def test_scan_image_stage_groups_resizes(make_tree, tmp_path_factory):
     result2 = Scan(root, cfg).run()
     assert result2.stats["image"]["hashed"] == 0
     assert len(result2.groups) == 1
+
+
+VIDEO_SKIP = pytest.mark.skipif(
+    not shutil.which("ffmpeg"), reason="ffmpeg not installed"
+)
+
+
+@VIDEO_SKIP
+def test_scan_video_stage(tmp_path, tmp_path_factory):
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi",
+         "-i", "testsrc=duration=40:size=640x480:rate=10",
+         "-pix_fmt", "yuv420p", str(tmp_path / "big.mp4")],
+        check=True,
+    )
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi",
+         "-i", "testsrc=duration=40:size=320x240:rate=10",
+         "-pix_fmt", "yuv420p", str(tmp_path / "small.mp4")],
+        check=True,
+    )
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = ScanConfig(cache_path=cache, image=False, audio=False, docs=False)
+    result = Scan(str(tmp_path), cfg).run()
+    assert len(result.groups) == 1
+    assert result.stats["video"]["hashed"] == 2
+    assert result.stats["video"]["matches"] == 1
+    meta = result.meta[str(tmp_path / "big.mp4")]
+    assert meta["width"] == 640 and meta["duration"] > 39
+
+    result2 = Scan(str(tmp_path), cfg).run()
+    assert result2.stats["video"]["hashed"] == 0

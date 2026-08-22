@@ -1,10 +1,13 @@
+import functools
 import multiprocessing as mp
+import struct
 import time
 
 from . import match as matching
 from .detectors import exact
 from .detectors.image import match_images
 from .detectors.imagehash import from_signed64, image_job, to_signed64
+from .detectors.video import coarse_signature, match_videos, video_job
 from .hashstore import HashStore
 from .pool import CancelledScan, run_jobs
 from .types import FileKind, ScanConfig, ScanResult
@@ -61,6 +64,12 @@ class Scan:
 
             if cfg.image:
                 self._image_stage(store, entries, matches, quality, meta, result)
+                if self._cancelled():
+                    result.cancelled = True
+                    return result
+
+            if cfg.video:
+                self._video_stage(store, entries, matches, quality, meta, result)
                 if self._cancelled():
                     result.cancelled = True
                     return result
@@ -168,5 +177,76 @@ class Scan:
             "files": len(images),
             "hashed": len(rows),
             "matches": len(stage_matches),
+            "seconds": round(time.monotonic() - t0, 3),
+        }
+
+    def _video_stage(self, store, entries, matches, quality, meta, result):
+        cfg = self.config
+        t0 = time.monotonic()
+        videos = [e for e in entries.values() if e.kind is FileKind.VIDEO]
+        cached = store.load("fp_video", entries)
+        missing = [e.path for e in videos if e.path not in cached]
+        self._progress("video", 0, max(len(missing), 1))
+        job = functools.partial(
+            video_job, interval=cfg.video_interval, max_frames=cfg.video_max_frames
+        )
+        rows, problems = run_jobs(
+            job,
+            missing,
+            workers=cfg.workers,
+            cancel_event=self.cancel_event,
+            progress_cb=lambda d, t: self._progress("video", d, t),
+        )
+        result.problems.extend(problems)
+
+        def pack(hashes):
+            return struct.pack(f"<{len(hashes)}Q", *hashes) if hashes else b""
+
+        store.put(
+            "fp_video",
+            [
+                {
+                    "path": p,
+                    "duration": duration,
+                    "frame_hashes": pack(hashes),
+                    "coarse": pack(coarse_signature(hashes)),
+                    "width": w,
+                    "height": h,
+                    "audio_fp": None,
+                }
+                for p, duration, hashes, w, h in rows
+            ],
+        )
+        fps = {}
+        for p, r in cached.items():
+            n = len(r["frame_hashes"]) // 8
+            hashes = list(struct.unpack(f"<{n}Q", r["frame_hashes"])) if n else []
+            fps[p] = {
+                "duration": r["duration"],
+                "hashes": hashes,
+                "width": r["width"],
+                "height": r["height"],
+            }
+        for p, duration, hashes, w, h in rows:
+            fps[p] = {"duration": duration, "hashes": hashes, "width": w, "height": h}
+        stage_matches = match_videos(
+            fps,
+            video_similarity=cfg.video_similarity,
+            containment_similarity=cfg.containment_similarity,
+            frame_threshold=cfg.video_frame_threshold,
+        )
+        matches.extend(stage_matches)
+        for p, v in fps.items():
+            quality[p] = float(v["width"] * v["height"] * max(v["duration"], 1.0))
+            meta[p] = {
+                "width": v["width"],
+                "height": v["height"],
+                "duration": v["duration"],
+            }
+        result.stats["video"] = {
+            "files": len(videos),
+            "hashed": len(rows),
+            "matches": len(stage_matches),
+            "pending_files": len(missing),
             "seconds": round(time.monotonic() - t0, 3),
         }
