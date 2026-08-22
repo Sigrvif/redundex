@@ -33,6 +33,8 @@ def _box_downsample(gray, size):
 
 def hash_gray_frame(gray):
     g = numpy.asarray(gray, dtype=numpy.float64)
+    if g.shape[0] < _SIZE or g.shape[1] < _SIZE:
+        raise ValueError("frame too small for hashing")
     if g.shape != (_SIZE, _SIZE):
         g = _box_downsample(g, _SIZE)
     return phash_gray(g)
@@ -57,12 +59,12 @@ def dhash_image(path):
 def image_job(path):
     with Image.open(path) as im:
         w, h = im.size
+        gray_im = im.convert("L")
         gray32 = numpy.asarray(
-            im.convert("L").resize((_SIZE, _SIZE), Image.LANCZOS),
-            dtype=numpy.float64,
+            gray_im.resize((_SIZE, _SIZE), Image.LANCZOS), dtype=numpy.float64
         )
         g98 = numpy.asarray(
-            im.convert("L").resize((9, 8), Image.LANCZOS), dtype=numpy.float64
+            gray_im.resize((9, 8), Image.LANCZOS), dtype=numpy.float64
         )
     dh = _pack_bits((g98[:, 1:] > g98[:, :-1]).flatten())
     return path, phash_gray(gray32), dh, w, h

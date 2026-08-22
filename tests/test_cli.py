@@ -1,4 +1,5 @@
 import json
+import os
 
 from redundex.core.cli import main
 
@@ -43,6 +44,16 @@ def test_scan_no_exact_flag(make_tree, tmp_path, capsys):
     data = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert "exact" not in data["stats"]
     assert data["groups"] == []
+
+
+def test_move_records_absolute_paths(make_tree, tmp_path, monkeypatch, capsys):
+    root = make_tree({"one.txt": b"1"})
+    monkeypatch.chdir(tmp_path)
+    main(["move", str(tmp_path / "coll"), "one.txt"])
+
+    manifest = sorted((tmp_path / "coll").glob("undo_*.json"))[-1]
+    data = json.loads(manifest.read_text())
+    assert os.path.isabs(data["moves"][0]["src"])
 
 
 def test_move_and_undo_commands(make_tree, tmp_path, capsys):

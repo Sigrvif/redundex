@@ -91,6 +91,21 @@ def test_restore_collision_uses_restored_n(make_tree, tmp_path):
     assert (root / "one.txt").read_bytes() == b"reoccupied"
 
 
+def test_move_rejects_source_outside_root(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "x.txt").write_bytes(b"1")
+    coll = tmp_path / "coll"
+    _m, moved, failed = move_batch(
+        [str(outside / "x.txt")], str(coll), root=str(tmp_path / "root")
+    )
+    assert moved == []
+    assert len(failed) == 1
+    assert "outside root" in failed[0]["error"]
+    assert (outside / "x.txt").exists()
+    assert list(coll.rglob("*.txt")) == []
+
+
 def test_undo_skips_missing_destination(make_tree, tmp_path):
     root = make_tree({"one.txt": b"1", "two.txt": b"2"})
     coll = tmp_path / "coll"

@@ -33,6 +33,16 @@ def test_either_tree_matches():
     assert len(match_images(fps, threshold=8)) == 1
 
 
+def test_identical_hashes_produce_all_pairs():
+    fps = {
+        "/a.png": (42, 42, 10, 10),
+        "/b.png": (42, 42, 10, 10),
+        "/c.png": (42, 42, 10, 10),
+    }
+    matches = match_images(fps, threshold=8)
+    assert len(matches) == 3
+
+
 def test_threshold_respected():
     base = 0
     far = (1 << 10) - 1

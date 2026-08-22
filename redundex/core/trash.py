@@ -1,7 +1,21 @@
 import json
 import os
 import shutil
+import tempfile
 import time
+
+
+def _atomic_write_json(path, data):
+    fd, tmp = tempfile.mkstemp(
+        dir=os.path.dirname(path), prefix=".undo-tmp-", suffix=".json"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, path)
+    except BaseException:
+        os.unlink(tmp)
+        raise
 
 
 def _unique_dest(dest):
@@ -45,6 +59,9 @@ def move_batch(paths, collection_dir, root=None):
     for src in paths:
         try:
             rel = os.path.relpath(src, root) if root else os.path.basename(src)
+            if os.path.isabs(rel) or rel == ".." or rel.startswith(".." + os.sep):
+                failed.append({"path": src, "error": "source outside root"})
+                continue
             dest = os.path.join(collection_dir, rel)
             os.makedirs(os.path.dirname(dest), exist_ok=True)
             dest = _unique_dest(dest)
@@ -52,12 +69,10 @@ def move_batch(paths, collection_dir, root=None):
             moved.append({"src": src, "dst": dest})
         except OSError as exc:
             failed.append({"path": src, "error": str(exc)})
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(
-            {"created": time.strftime("%Y-%m-%dT%H:%M:%S"), "moves": moved},
-            f,
-            indent=2,
-        )
+    _atomic_write_json(
+        manifest_path,
+        {"created": time.strftime("%Y-%m-%dT%H:%M:%S"), "moves": moved},
+    )
     return manifest_path, moved, failed
 
 
@@ -99,8 +114,7 @@ def undo_last(collection_dir):
             remaining.append(move)
     if remaining:
         data["moves"] = remaining
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+        _atomic_write_json(manifest_path, data)
     else:
         os.remove(manifest_path)
     return {

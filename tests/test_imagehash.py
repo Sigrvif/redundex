@@ -1,3 +1,4 @@
+import pytest
 import numpy
 from PIL import Image
 
@@ -5,6 +6,7 @@ from redundex.core.detectors.imagehash import (
     dhash_image,
     from_signed64,
     hamming,
+    hash_gray_frame,
     image_job,
     phash_image,
     to_signed64,
@@ -73,6 +75,12 @@ def test_signed64_roundtrip():
         s = to_signed64(v)
         assert -(2**63) <= s < 2**63
         assert from_signed64(s) == v
+
+
+def test_hash_gray_frame_rejects_small_frames():
+    small = numpy.zeros((24, 64), dtype=numpy.uint8)
+    with pytest.raises(ValueError):
+        hash_gray_frame(small)
 
 
 def test_image_job_returns_size_and_hashes(tmp_path):

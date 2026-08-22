@@ -1,8 +1,8 @@
 class _Node:
-    __slots__ = ("item", "children")
+    __slots__ = ("items", "children")
 
     def __init__(self, item):
-        self.item = item
+        self.items = [item]
         self.children = {}
 
 
@@ -21,8 +21,10 @@ class BKTree:
             return
         node = self.root
         while True:
-            d = self.distance(item, node.item)
+            d = self.distance(item, node.items[0])
             if d == 0:
+                if item not in node.items:
+                    node.items.append(item)
                 return
             child = node.children.get(d)
             if child is None:
@@ -37,9 +39,10 @@ class BKTree:
         stack = [self.root]
         while stack:
             node = stack.pop()
-            d = self.distance(target, node.item)
+            d = self.distance(target, node.items[0])
             if d <= radius:
-                found.append((d, node.item))
+                for it in node.items:
+                    found.append((d, it))
             lo, hi = d - radius, d + radius
             for dist, child in node.children.items():
                 if lo <= dist <= hi:

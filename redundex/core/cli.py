@@ -54,8 +54,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.cmd == "move":
-        root = os.path.commonpath([os.path.abspath(p) for p in args.paths])
-        manifest, moved, failed = move_batch(args.paths, args.collection, root=root)
+        paths = [os.path.abspath(p) for p in args.paths]
+        try:
+            root = os.path.commonpath(paths)
+        except ValueError:
+            parser.error("paths do not share a common root")
+        manifest, moved, failed = move_batch(paths, args.collection, root=root)
         print(f"moved {len(moved)} file(s), {len(failed)} failed")
         print(f"manifest: {manifest}")
         for f in failed:
