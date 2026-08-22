@@ -18,3 +18,8 @@ def test_scan_config_defaults():
 def test_enums_are_strings():
     assert FileKind.IMAGE == "image"
     assert MatchReason.CONTAINED_IN == "contained-in"
+
+
+def test_enum_str_and_frozen_invariants():
+    assert str(FileKind.IMAGE) == "image"
+    assert f"{MatchReason.CONTAINED_IN}" == "contained-in"

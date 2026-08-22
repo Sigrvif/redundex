@@ -10,6 +10,8 @@ class FileKind(str, Enum):
     ARCHIVE = "archive"
     OTHER = "other"
 
+    __str__ = str.__str__
+
 
 class MatchReason(str, Enum):
     EXACT = "exact"
@@ -17,6 +19,8 @@ class MatchReason(str, Enum):
     CONTAINED_IN = "contained-in"
     SAME_TRACK = "same-track"
     SAME_TEXT = "same-text"
+
+    __str__ = str.__str__
 
 
 @dataclass(frozen=True)
