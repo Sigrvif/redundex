@@ -70,6 +70,26 @@ def test_stale_lock_is_taken_over(make_tree, tmp_path):
     store.close()
 
 
+def test_init_failure_releases_lock(make_tree, tmp_path):
+    import sqlite3
+
+    root = make_tree({"a.jpg": b"x"})
+    cache = tmp_path / "corrupt.sqlite"
+    cache.write_bytes(b"this is not a sqlite database" * 10)
+    with pytest.raises(sqlite3.DatabaseError):
+        HashStore(root, cache_path=str(cache))
+    assert not (tmp_path / "corrupt.sqlite.lock").exists()
+
+
+def test_put_rejects_unknown_columns(make_tree, tmp_path):
+    root = make_tree({"a.jpg": b"x"})
+    entries = _first_entry(root)
+    store = HashStore(root, cache_path=str(tmp_path / "c.sqlite"))
+    with pytest.raises(ValueError):
+        store.put("fp_exact", [{"path": "x", "file_hash": "h", "bogus": 1}])
+    store.close()
+
+
 def test_default_cache_location(make_tree):
     root = make_tree({"a.jpg": b"x"})
     store = HashStore(root)

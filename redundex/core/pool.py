@@ -25,6 +25,13 @@ def run_jobs(fn, items, workers=None, cancel_event=None, progress_cb=None):
                 item = futures[fut]
                 try:
                     results.append(fut.result())
+                except concurrent.futures.BrokenExecutor as exc:
+                    problems.append(
+                        {"item": None, "error": f"worker pool crashed: {exc}"}
+                    )
+                    for f in futures:
+                        f.cancel()
+                    break
                 except Exception as exc:
                     problems.append({"item": item, "error": str(exc)})
                 done += 1

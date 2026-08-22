@@ -34,10 +34,17 @@ class HashStore:
         self.path = p
         self.lock_path = p.with_name(p.name + ".lock")
         self._acquire_lock()
-        self.db = sqlite3.connect(str(p))
-        self.db.execute("PRAGMA journal_mode=WAL")
-        self.db.executescript(SCHEMA)
-        self.db.commit()
+        try:
+            self.db = sqlite3.connect(str(p))
+            self.db.execute("PRAGMA journal_mode=WAL")
+            self.db.executescript(SCHEMA)
+            self.db.commit()
+        except Exception:
+            try:
+                self.lock_path.unlink()
+            except FileNotFoundError:
+                pass
+            raise
 
     def _acquire_lock(self, stale_after=24 * 3600):
         for _ in range(2):
@@ -67,6 +74,9 @@ class HashStore:
         if table not in _TABLES:
             raise ValueError(f"unknown table: {table}")
         return table
+
+    def _columns(self, table):
+        return {r[1] for r in self.db.execute(f"PRAGMA table_info({table})")}
 
     def save_files(self, entries):
         rows = [
@@ -101,6 +111,9 @@ class HashStore:
         if not rows:
             return
         cols = list(rows[0].keys())
+        unknown = [c for c in cols if c not in self._columns(table)]
+        if unknown:
+            raise ValueError(f"unknown columns for {table}: {','.join(unknown)}")
         sql = (
             f"INSERT OR REPLACE INTO {table}({','.join(cols)}) "
             f"VALUES({','.join('?' * len(cols))})"

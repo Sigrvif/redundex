@@ -35,5 +35,19 @@ def test_run_jobs_cancel_raises():
         run_jobs(_double, list(range(10)), workers=2, cancel_event=ev)
 
 
+def _kill_worker(item):
+    import os
+
+    os._exit(1)
+
+
+def test_run_jobs_broken_pool_single_problem():
+    results, problems = run_jobs(_kill_worker, [1, 2, 3], workers=1)
+    assert problems != []
+    assert len(problems) == 1
+    assert problems[0]["item"] is None
+    assert "pool crashed" in problems[0]["error"]
+
+
 def test_run_jobs_empty_items():
     assert run_jobs(_double, []) == ([], [])
