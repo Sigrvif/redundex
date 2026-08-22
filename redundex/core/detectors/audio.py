@@ -1,3 +1,9 @@
+import struct
+import subprocess
+
+from ..types import Match, MatchReason
+
+
 def best_ber(short, long):
     n, m = len(short), len(long)
     if n == 0 or m == 0:
@@ -37,3 +43,63 @@ def audio_candidates(fps, min_hits=8, max_bucket=200):
                 pair = (ordered[i], ordered[j])
                 counts[pair] = counts.get(pair, 0) + 1
     return {pair for pair, c in counts.items() if c >= min_hits}
+
+
+class FpCalcError(Exception):
+    pass
+
+
+def fpcalc_raw(path, length=120):
+    proc = subprocess.run(
+        ["fpcalc", "-raw", "-length", str(length), path],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        raise FpCalcError(proc.stderr.strip()[:200] or "fpcalc failed")
+    duration = 0.0
+    hexdata = None
+    for line in proc.stdout.splitlines():
+        if line.startswith("DURATION="):
+            try:
+                duration = float(line.split("=", 1)[1])
+            except ValueError:
+                duration = 0.0
+        elif line.startswith("FINGERPRINT="):
+            hexdata = line.split("=", 1)[1].strip()
+    if not hexdata:
+        raise FpCalcError("no fingerprint in output")
+    subs = [int(hexdata[i * 8 : (i + 1) * 8], 16) for i in range(len(hexdata) // 8)]
+    return subs, duration
+
+
+def match_audio(fps, ber_threshold=0.30, min_duration_ratio=0.5):
+    candidates = audio_candidates({p: v[0] for p, v in fps.items()})
+    matches = []
+    for a, b in sorted(candidates):
+        (subs_a, dur_a), (subs_b, dur_b) = fps[a], fps[b]
+        mx = max(dur_a, dur_b)
+        if mx > 0 and min(dur_a, dur_b) / mx < min_duration_ratio:
+            continue
+        ber, _offset = best_ber(subs_a, subs_b)
+        if ber <= ber_threshold:
+            matches.append(
+                Match(
+                    a=a, b=b, reason=MatchReason.SAME_TRACK, score=1.0 - ber,
+                    detail=f"bit error rate {ber:.3f}",
+                )
+            )
+    return matches
+
+
+def pack_subs(subs):
+    return struct.pack(f"<{len(subs)}I", *subs) if subs else b""
+
+
+def unpack_subs(blob):
+    n = len(blob) // 4
+    return list(struct.unpack(f"<{n}I", blob)) if n else []
+
+
+def fpcalc_job(path):
+    subs, duration = fpcalc_raw(path)
+    return path, pack_subs(subs), duration

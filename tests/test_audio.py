@@ -1,4 +1,15 @@
-from redundex.core.detectors.audio import audio_candidates, best_ber
+import shutil
+import subprocess
+
+import pytest
+
+from redundex.core.detectors.audio import (
+    audio_candidates,
+    best_ber,
+    fpcalc_raw,
+    match_audio,
+)
+from redundex.core.types import MatchReason
 
 
 def _word(i, salt=0):
@@ -38,3 +49,52 @@ def test_audio_candidates_shared_segment():
 
 def test_audio_candidates_empty():
     assert audio_candidates({}) == set()
+
+
+tools = pytest.mark.skipif(
+    not (shutil.which("fpcalc") and shutil.which("ffmpeg")),
+    reason="fpcalc/ffmpeg not installed",
+)
+
+
+def _make_audio(path, freq=440, duration=30):
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi",
+         "-i", f"sine=frequency={freq}:duration={duration}",
+         str(path)],
+        check=True,
+    )
+    return str(path)
+
+
+@tools
+def test_fpcalc_raw_parses(tmp_path):
+    p = _make_audio(tmp_path / "s.wav")
+    subs, duration = fpcalc_raw(p)
+    assert 25 <= duration <= 35
+    assert len(subs) > 50
+    assert all(0 <= v < 2**32 for v in subs)
+
+
+@tools
+def test_same_track_different_format(tmp_path):
+    wav = _make_audio(tmp_path / "track.wav")
+    ogg = str(tmp_path / "track.ogg")
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", wav, "-c:a", "libvorbis", ogg],
+        check=True,
+    )
+    fa = fpcalc_raw(wav)
+    fb = fpcalc_raw(ogg)
+    fps = {"track.wav": fa, "track.ogg": fb}
+    matches = match_audio(fps, ber_threshold=0.30)
+    assert len(matches) == 1
+    assert matches[0].reason is MatchReason.SAME_TRACK
+
+
+@tools
+def test_different_tracks_do_not_match(tmp_path):
+    a = _make_audio(tmp_path / "a.wav", freq=440)
+    b = _make_audio(tmp_path / "b.wav", freq=2000)
+    fps = {"a.wav": fpcalc_raw(a), "b.wav": fpcalc_raw(b)}
+    assert match_audio(fps, ber_threshold=0.30) == []
