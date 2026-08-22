@@ -40,3 +40,19 @@ def test_containment_candidates_shared_frames():
 
 def test_containment_candidates_empty():
     assert containment_candidates({}) == set()
+
+
+def test_coarse_candidates_identical_content_star():
+    base = 0x123456789ABCDEF0
+    vids = {f"v{i}.mp4": [base] * 16 for i in range(50)}
+    pairs = coarse_candidates(vids)
+    assert len(pairs) == 49
+    assert all("v0.mp4" in p for p in pairs)
+
+
+def test_containment_candidates_identical_content_star():
+    clip = [_mix(i) for i in range(12)]
+    vids = {f"v{i}.mp4": clip for i in range(50)}
+    pairs = containment_candidates(vids)
+    assert len(pairs) == 49
+    assert all("v0.mp4" in p for p in pairs)

@@ -14,11 +14,14 @@ class ProbeError(Exception):
 
 
 def probe(path):
-    proc = subprocess.run(
-        ["ffprobe", "-v", "error", "-print_format", "json",
-         "-show_format", "-show_streams", path],
-        capture_output=True, text=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["ffprobe", "-v", "error", "-print_format", "json",
+             "-show_format", "-show_streams", path],
+            capture_output=True, text=True, timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ProbeError("ffprobe timed out") from exc
     if proc.returncode != 0:
         raise ProbeError(proc.stderr.strip()[:200] or "ffprobe failed")
     data = json.loads(proc.stdout)
@@ -47,12 +50,15 @@ def sample_frames(path, duration, interval=5.0, max_frames=200):
     else:
         interval = max(interval, duration / max_frames)
         count = min(max_frames, int(duration / interval) + 1)
-    proc = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", path,
-         "-vf", f"fps=1/{interval},scale={FRAME_W}:{FRAME_H}",
-         "-frames:v", str(count), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
-        capture_output=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", path,
+             "-vf", f"fps=1/{interval},scale={FRAME_W}:{FRAME_H}",
+             "-frames:v", str(count), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+            capture_output=True, timeout=300,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ProbeError("frame extraction timed out") from exc
     if proc.returncode != 0:
         raise ProbeError("frame extraction failed")
     frame_size = FRAME_W * FRAME_H
@@ -117,20 +123,31 @@ def _bands(h):
     return ((h >> 48) & 0xFFFF, (h >> 32) & 0xFFFF, (h >> 16) & 0xFFFF, h & 0xFFFF)
 
 
-def coarse_candidates(signatures):
-    index = {}
+def coarse_candidates(signatures, max_bucket=200):
+    groups = {}
     for path, hashes in signatures.items():
-        for h in hashes:
+        groups.setdefault(tuple(hashes), []).append(path)
+    pairs = set()
+    index = {}
+    for sig, members in groups.items():
+        ordered = sorted(members)
+        rep = ordered[0]
+        for other in ordered[1:]:
+            pairs.add((rep, other))
+        for h in sig:
             for band_no, value in enumerate(_bands(h)):
-                index.setdefault((band_no, value), set()).add(path)
+                index.setdefault((band_no, value), set()).add(rep)
     counts = {}
     for members in index.values():
+        if len(members) < 2 or len(members) > max_bucket:
+            continue
         ordered = sorted(members)
         for i in range(len(ordered)):
             for j in range(i + 1, len(ordered)):
                 pair = (ordered[i], ordered[j])
                 counts[pair] = counts.get(pair, 0) + 1
-    return {pair for pair, c in counts.items() if c >= 2}
+    pairs.update(pair for pair, c in counts.items() if c >= 2)
+    return pairs
 
 
 def _frame_band_set(hashes):
@@ -142,20 +159,29 @@ def _frame_band_set(hashes):
 
 
 def containment_candidates(videos, min_hits=8, max_bucket=200):
-    index = {}
+    groups = {}
     for path, hashes in videos.items():
-        for key in _frame_band_set(hashes):
-            index.setdefault(key, []).append(path)
+        groups.setdefault(frozenset(_frame_band_set(hashes)), []).append(path)
+    pairs = set()
+    index = {}
+    for band_keys, members in groups.items():
+        ordered = sorted(members)
+        rep = ordered[0]
+        for other in ordered[1:]:
+            pairs.add((rep, other))
+        for key in band_keys:
+            index.setdefault(key, []).append(rep)
     counts = {}
     for members in index.values():
-        if len(members) > max_bucket:
+        if len(members) < 2 or len(members) > max_bucket:
             continue
         ordered = sorted(members)
         for i in range(len(ordered)):
             for j in range(i + 1, len(ordered)):
                 pair = (ordered[i], ordered[j])
                 counts[pair] = counts.get(pair, 0) + 1
-    return {pair for pair, c in counts.items() if c >= min_hits}
+    pairs.update(pair for pair, c in counts.items() if c >= min_hits)
+    return pairs
 
 
 def _format_timecode(seconds):
