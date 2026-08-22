@@ -10,7 +10,7 @@ def test_scan_sync_and_move_flow(qtbot, make_tree, tmp_path, tmp_path_factory, m
     win.folder_edit.setText(str(root))
     win.scan_sync()
     assert win.model.rowCount() == 1
-    assert "1 group" in win.status.text() or win.model.rowCount() == 1
+    assert "1 group" in win.status.text()
 
     child = win.model.index(0, 0, win.model.index(0, 0))
     win.model.toggle_mark(child)
@@ -37,6 +37,7 @@ def test_scan_sync_and_move_flow(qtbot, make_tree, tmp_path, tmp_path_factory, m
 
     win.undo_last_move()
     assert (root / "a/one.bin").exists() and (root / "b/one.bin").exists()
+    win.close()
 
 
 def test_detector_toggles_reflect_capabilities(qtbot, monkeypatch):

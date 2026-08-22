@@ -130,6 +130,8 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
     def scan_sync(self):
+        if self._worker is not None and self._worker.isRunning():
+            return
         self._root = self.folder_edit.text().strip()
         scan = Scan(self._root, self._config())
         self._apply_result(scan.run())
@@ -199,7 +201,7 @@ class MainWindow(QtWidgets.QMainWindow):
         msg = f"Moved {len(moved)}, failed {len(failed)}. Manifest: {manifest}"
         QtWidgets.QMessageBox.information(self, "Move", msg)
         if moved:
-            self.scan_sync()
+            self.start_scan()
 
     def undo_last_move(self):
         coll = QtWidgets.QFileDialog.getExistingDirectory(
@@ -214,7 +216,7 @@ class MainWindow(QtWidgets.QMainWindow):
             f"Restored {outcome['restored']}, remaining {outcome['remaining']}",
         )
         if outcome["restored"]:
-            self.scan_sync()
+            self.start_scan()
 
     def _compare_selected(self):
         rows = self.tree.selectionModel().selectedRows(0)
@@ -264,3 +266,12 @@ class MainWindow(QtWidgets.QMainWindow):
             dock.setWidget(self.preview_pane)
             self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
         self.preview_pane.set_file(entry, self.model._meta.get(entry.path, {}))
+
+    def closeEvent(self, event):
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.wait()
+        if hasattr(self, "preview_pane"):
+            for w in list(self.preview_pane._thumb_workers):
+                w.wait()
+        super().closeEvent(event)

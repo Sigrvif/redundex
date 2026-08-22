@@ -106,6 +106,8 @@ class PreviewPane(QtWidgets.QWidget):
             self._thumb_workers.append(self._worker)
 
     def _show_thumbs(self, images):
+        if self.sender() is not self._worker:
+            return
         for img in images:
             label = QtWidgets.QLabel()
             label.setPixmap(QtGui.QPixmap.fromImage(img))
