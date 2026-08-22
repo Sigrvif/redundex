@@ -299,7 +299,7 @@ class Scan:
             ],
         )
         for prob in problems:
-            if entries[prob["path"]].kind is not FileKind.VIDEO:
+            if prob["path"] is None or entries[prob["path"]].kind is not FileKind.VIDEO:
                 result.problems.append(prob)
         fps = {p: (unpack_subs(r["raw"]), r["duration"]) for p, r in cached.items()}
         fps.update({p: (unpack_subs(raw), duration) for p, raw, duration in rows})
@@ -351,7 +351,7 @@ class Scan:
         for p, th, ph in rows:
             if th or ph is not None:
                 fps[p] = (th, ph)
-        stage_matches = match_docs(fps)
+        stage_matches = match_docs(fps, phash_threshold=cfg.image_threshold)
         matches.extend(stage_matches)
         result.stats["docs"] = {
             "files": len(docs),

@@ -29,20 +29,29 @@ def _band_keys(subs):
 
 
 def audio_candidates(fps, min_hits=8, max_bucket=200):
-    index = {}
+    groups = {}
     for path, subs in fps.items():
+        groups.setdefault(tuple(subs), []).append(path)
+    pairs = set()
+    index = {}
+    for subs, members in groups.items():
+        ordered = sorted(members)
+        rep = ordered[0]
+        for other in ordered[1:]:
+            pairs.add((rep, other))
         for key in _band_keys(subs):
-            index.setdefault(key, []).append(path)
+            index.setdefault(key, []).append(rep)
     counts = {}
     for members in index.values():
-        if len(members) > max_bucket:
+        if len(members) < 2 or len(members) > max_bucket:
             continue
         ordered = sorted(members)
         for i in range(len(ordered)):
             for j in range(i + 1, len(ordered)):
                 pair = (ordered[i], ordered[j])
                 counts[pair] = counts.get(pair, 0) + 1
-    return {pair for pair, c in counts.items() if c >= min_hits}
+    pairs.update(pair for pair, c in counts.items() if c >= min_hits)
+    return pairs
 
 
 class FpCalcError(Exception):
@@ -50,10 +59,13 @@ class FpCalcError(Exception):
 
 
 def fpcalc_raw(path, length=120):
-    proc = subprocess.run(
-        ["fpcalc", "-raw", "-length", str(length), path],
-        capture_output=True, text=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["fpcalc", "-raw", "-length", str(length), path],
+            capture_output=True, text=True, timeout=120,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise FpCalcError("fpcalc timed out") from exc
     if proc.returncode != 0:
         raise FpCalcError(proc.stderr.strip()[:200] or "fpcalc failed")
     duration = 0.0

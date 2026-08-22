@@ -51,6 +51,14 @@ def test_audio_candidates_empty():
     assert audio_candidates({}) == set()
 
 
+def test_audio_candidates_identical_content_star():
+    track = [_word(i) for i in range(40)]
+    fps = {f"t{i}.mp3": track for i in range(50)}
+    pairs = audio_candidates(fps)
+    assert len(pairs) == 49
+    assert all("t0.mp3" in p for p in pairs)
+
+
 tools = pytest.mark.skipif(
     not (shutil.which("fpcalc") and shutil.which("ffmpeg")),
     reason="fpcalc/ffmpeg not installed",
