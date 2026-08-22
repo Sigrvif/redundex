@@ -3,7 +3,7 @@ import subprocess
 
 import numpy
 
-from .imagehash import hash_gray_frame
+from .imagehash import hamming, hash_gray_frame
 
 FRAME_W, FRAME_H = 160, 90
 
@@ -69,3 +69,44 @@ def video_job(path, interval=5.0, max_frames=200):
         path, info["duration"], interval=interval, max_frames=max_frames
     )
     return path, info["duration"], hashes, info["width"], info["height"]
+
+
+def frames_agree(a, b, frame_threshold=6):
+    return hamming(a, b) <= frame_threshold
+
+
+def aligned_similarity(h1, h2, frame_threshold=6):
+    if not h1 or not h2:
+        return 0.0
+    dense, sparse = (h1, h2) if len(h1) >= len(h2) else (h2, h1)
+    hits = 0
+    for j, h in enumerate(dense):
+        t = j / (len(dense) - 1) if len(dense) > 1 else 0.0
+        idx = round(t * (len(sparse) - 1))
+        if frames_agree(h, sparse[idx], frame_threshold):
+            hits += 1
+    return hits / len(dense)
+
+
+def best_window(short, long, frame_threshold=6):
+    n, m = len(short), len(long)
+    if n == 0 or m < n:
+        return 0.0, -1
+    best_sim, best_off = 0.0, -1
+    for off in range(m - n + 1):
+        hits = sum(
+            1
+            for a, b in zip(short, long[off : off + n])
+            if frames_agree(a, b, frame_threshold)
+        )
+        sim = hits / n
+        if sim > best_sim:
+            best_sim, best_off = sim, off
+    return best_sim, best_off
+
+
+def coarse_signature(hashes):
+    n = len(hashes)
+    if n == 0:
+        return []
+    return [hashes[round(k * (n - 1) / 15)] for k in range(16)]
