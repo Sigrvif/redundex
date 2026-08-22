@@ -71,4 +71,12 @@ class ScanResult:
     groups: list = field(default_factory=list)
     problems: list = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    meta: dict = field(default_factory=dict)
     cancelled: bool = False
+
+
+def format_size(n):
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n} B" if unit == "B" else f"{n:.1f} {unit}"
+        n /= 1024

@@ -6,19 +6,12 @@ import sys
 
 from .scan import Scan
 from .trash import move_batch, undo_last
-from .types import ScanConfig
+from .types import ScanConfig, format_size
 
 
 def _progress(stage, done, total):
     sys.stderr.write(f"\r{stage}: {done}/{total}")
     sys.stderr.flush()
-
-
-def _format_size(n):
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if n < 1024 or unit == "TB":
-            return f"{n:.1f} {unit}" if unit != "B" else f"{n} B"
-        n /= 1024
 
 
 def _result_to_dict(result):
@@ -88,10 +81,10 @@ def main(argv=None):
         return 0
 
     total = sum(g.redundancy for g in result.groups)
-    print(f"{len(result.groups)} groups, {_format_size(total)} redundant")
+    print(f"{len(result.groups)} groups, {format_size(total)} redundant")
     for i, g in enumerate(result.groups, 1):
         reasons = ", ".join(sorted({m.reason.value for m in g.matches}))
-        print(f"[{i}] {len(g.members)} files, {_format_size(g.redundancy)} redundant ({reasons})")
+        print(f"[{i}] {len(g.members)} files, {format_size(g.redundancy)} redundant ({reasons})")
         for m in g.members:
             print(f"    {m.path}")
     if result.problems:

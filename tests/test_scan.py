@@ -100,6 +100,8 @@ def test_scan_image_stage_groups_resizes(make_tree, tmp_path_factory):
     assert g.members[0].path == str(root / "big.png")
     assert result.stats["image"]["hashed"] == 3
     assert result.stats["image"]["matches"] == 1
+    assert result.meta[str(root / "big.png")] == {"width": 256, "height": 256}
+    assert result.meta[str(root / "small.png")] == {"width": 64, "height": 64}
 
     result2 = Scan(root, cfg).run()
     assert result2.stats["image"]["hashed"] == 0

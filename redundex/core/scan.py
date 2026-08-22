@@ -52,6 +52,7 @@ class Scan:
 
             matches = []
             quality = {}
+            meta = {}
             if cfg.exact:
                 self._exact_stage(store, entries, matches, result)
             if self._cancelled():
@@ -59,12 +60,13 @@ class Scan:
                 return result
 
             if cfg.image:
-                self._image_stage(store, entries, matches, quality, result)
+                self._image_stage(store, entries, matches, quality, meta, result)
                 if self._cancelled():
                     result.cancelled = True
                     return result
 
             self._progress("group", 0, 1)
+            result.meta = meta
             result.groups = matching.build_groups(entries, matches, quality)
             result.stats["groups"] = len(result.groups)
             self._progress("group", 1, 1)
@@ -119,7 +121,7 @@ class Scan:
             "seconds": round(time.monotonic() - t0, 3),
         }
 
-    def _image_stage(self, store, entries, matches, quality, result):
+    def _image_stage(self, store, entries, matches, quality, meta, result):
         cfg = self.config
         t0 = time.monotonic()
         images = [e for e in entries.values() if e.kind is FileKind.IMAGE]
@@ -161,6 +163,7 @@ class Scan:
         matches.extend(stage_matches)
         for p, (_ph, _dh, w, h) in fps.items():
             quality[p] = float(w * h)
+            meta[p] = {"width": w, "height": h}
         result.stats["image"] = {
             "files": len(images),
             "hashed": len(rows),
