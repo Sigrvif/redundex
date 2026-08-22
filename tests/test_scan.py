@@ -141,3 +141,55 @@ def test_scan_video_stage(tmp_path, tmp_path_factory):
 
     result2 = Scan(str(tmp_path), cfg).run()
     assert result2.stats["video"]["hashed"] == 0
+
+
+def test_scan_docs_stage(tmp_path, tmp_path_factory):
+    import pymupdf
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=300, height=200)
+    page.insert_text((20, 40), "Redundant document content")
+    doc.save(str(tmp_path / "a.pdf"))
+    doc.close()
+    doc = pymupdf.open()
+    page = doc.new_page(width=500, height=400)
+    page.insert_text((80, 90), "Redundant   DOCUMENT\ncontent")
+    doc.save(str(tmp_path / "b.pdf"))
+    doc.close()
+    (tmp_path / "c.txt").write_text("redundantdocumentcontent")
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = ScanConfig(cache_path=cache, image=False, video=False, audio=False)
+    result = Scan(str(tmp_path), cfg).run()
+    assert len(result.groups) == 1
+    assert len(result.groups[0].members) == 3
+    assert result.stats["docs"]["matches"] == 2
+    result2 = Scan(str(tmp_path), cfg).run()
+    assert result2.stats["docs"]["hashed"] == 0
+
+
+AUDIO_SKIP = pytest.mark.skipif(
+    not (shutil.which("fpcalc") and shutil.which("ffmpeg")),
+    reason="fpcalc/ffmpeg not installed",
+)
+
+
+@AUDIO_SKIP
+def test_scan_audio_stage(tmp_path, tmp_path_factory):
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi",
+         "-i", "sine=frequency=440:duration=30",
+         str(tmp_path / "t.wav")],
+        check=True,
+    )
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(tmp_path / "t.wav"),
+         "-c:a", "libvorbis", str(tmp_path / "t.ogg")],
+        check=True,
+    )
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = ScanConfig(cache_path=cache, image=False, video=False, docs=False)
+    result = Scan(str(tmp_path), cfg).run()
+    assert len(result.groups) == 1
+    assert result.stats["audio"]["matches"] == 1
+    result2 = Scan(str(tmp_path), cfg).run()
+    assert result2.stats["audio"]["hashed"] == 0

@@ -1,10 +1,13 @@
 import functools
 import multiprocessing as mp
+import shutil
 import struct
 import time
 
 from . import match as matching
 from .detectors import exact
+from .detectors.audio import fpcalc_job, match_audio, unpack_subs
+from .detectors.docs import doc_job, match_docs
 from .detectors.image import match_images
 from .detectors.imagehash import from_signed64, image_job, to_signed64
 from .detectors.video import coarse_signature, match_videos, video_job
@@ -70,6 +73,17 @@ class Scan:
 
             if cfg.video:
                 self._video_stage(store, entries, matches, quality, meta, result)
+                if self._cancelled():
+                    result.cancelled = True
+                    return result
+
+            if cfg.audio:
+                self._audio_stage(store, entries, matches, quality, meta, result)
+                if self._cancelled():
+                    result.cancelled = True
+                    return result
+            if cfg.docs:
+                self._docs_stage(store, entries, matches, quality, meta, result)
                 if self._cancelled():
                     result.cancelled = True
                     return result
@@ -248,5 +262,100 @@ class Scan:
             "hashed": len(rows),
             "matches": len(stage_matches),
             "pending_files": len(missing),
+            "seconds": round(time.monotonic() - t0, 3),
+        }
+
+    def _audio_stage(self, store, entries, matches, quality, meta, result):
+        cfg = self.config
+        t0 = time.monotonic()
+        targets = [
+            e.path
+            for e in entries.values()
+            if e.kind in (FileKind.AUDIO, FileKind.VIDEO)
+        ]
+        if shutil.which("fpcalc") is None:
+            result.stats["audio"] = {
+                "files": len(targets),
+                "hashed": 0,
+                "matches": 0,
+                "skipped": "fpcalc not installed",
+            }
+            return
+        cached = store.load("fp_audio", entries)
+        missing = [p for p in targets if p not in cached]
+        self._progress("audio", 0, max(len(missing), 1))
+        rows, problems = run_jobs(
+            fpcalc_job,
+            missing,
+            workers=cfg.workers,
+            cancel_event=self.cancel_event,
+            progress_cb=lambda d, t: self._progress("audio", d, t),
+        )
+        store.put(
+            "fp_audio",
+            [
+                {"path": p, "raw": raw, "duration": duration}
+                for p, raw, duration in rows
+            ],
+        )
+        for prob in problems:
+            if entries[prob["path"]].kind is not FileKind.VIDEO:
+                result.problems.append(prob)
+        fps = {p: (unpack_subs(r["raw"]), r["duration"]) for p, r in cached.items()}
+        fps.update({p: (unpack_subs(raw), duration) for p, raw, duration in rows})
+        stage_matches = match_audio(fps, ber_threshold=cfg.audio_ber)
+        matches.extend(stage_matches)
+        for p, (_subs, duration) in fps.items():
+            if entries[p].kind is not FileKind.AUDIO:
+                continue
+            quality[p] = float(entries[p].size / max(duration, 1.0))
+            meta[p] = {"duration": duration}
+        result.stats["audio"] = {
+            "files": len(targets),
+            "hashed": len(rows),
+            "matches": len(stage_matches),
+            "seconds": round(time.monotonic() - t0, 3),
+        }
+
+    def _docs_stage(self, store, entries, matches, quality, meta, result):
+        cfg = self.config
+        t0 = time.monotonic()
+        docs = [e for e in entries.values() if e.kind is FileKind.DOC]
+        cached = store.load("fp_doc", entries)
+        missing = [e.path for e in docs if e.path not in cached]
+        self._progress("docs", 0, max(len(missing), 1))
+        rows, problems = run_jobs(
+            doc_job,
+            missing,
+            workers=cfg.workers,
+            cancel_event=self.cancel_event,
+            progress_cb=lambda d, t: self._progress("docs", d, t),
+        )
+        result.problems.extend(problems)
+        store.put(
+            "fp_doc",
+            [
+                {
+                    "path": p,
+                    "text_hash": th,
+                    "page1_phash": to_signed64(ph) if ph is not None else None,
+                }
+                for p, th, ph in rows
+            ],
+        )
+        fps = {}
+        for p, r in cached.items():
+            ph = from_signed64(r["page1_phash"]) if r["page1_phash"] is not None else None
+            if r["text_hash"] or ph is not None:
+                fps[p] = (r["text_hash"], ph)
+        for p, th, ph in rows:
+            if th or ph is not None:
+                fps[p] = (th, ph)
+        stage_matches = match_docs(fps)
+        matches.extend(stage_matches)
+        result.stats["docs"] = {
+            "files": len(docs),
+            "hashed": len(rows),
+            "matches": len(stage_matches),
             "seconds": round(time.monotonic() - t0, 3),
         }
