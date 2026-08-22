@@ -110,3 +110,48 @@ def coarse_signature(hashes):
     if n == 0:
         return []
     return [hashes[round(k * (n - 1) / 15)] for k in range(16)]
+
+
+def _bands(h):
+    return ((h >> 48) & 0xFFFF, (h >> 32) & 0xFFFF, (h >> 16) & 0xFFFF, h & 0xFFFF)
+
+
+def coarse_candidates(signatures):
+    index = {}
+    for path, hashes in signatures.items():
+        for h in hashes:
+            for band_no, value in enumerate(_bands(h)):
+                index.setdefault((band_no, value), set()).add(path)
+    counts = {}
+    for members in index.values():
+        ordered = sorted(members)
+        for i in range(len(ordered)):
+            for j in range(i + 1, len(ordered)):
+                pair = (ordered[i], ordered[j])
+                counts[pair] = counts.get(pair, 0) + 1
+    return {pair for pair, c in counts.items() if c >= 2}
+
+
+def _frame_band_set(hashes):
+    keys = set()
+    for h in hashes:
+        for band_no, value in enumerate(_bands(h)):
+            keys.add((band_no, value))
+    return keys
+
+
+def containment_candidates(videos, min_hits=8, max_bucket=200):
+    index = {}
+    for path, hashes in videos.items():
+        for key in _frame_band_set(hashes):
+            index.setdefault(key, []).append(path)
+    counts = {}
+    for members in index.values():
+        if len(members) > max_bucket:
+            continue
+        ordered = sorted(members)
+        for i in range(len(ordered)):
+            for j in range(i + 1, len(ordered)):
+                pair = (ordered[i], ordered[j])
+                counts[pair] = counts.get(pair, 0) + 1
+    return {pair for pair, c in counts.items() if c >= min_hits}
