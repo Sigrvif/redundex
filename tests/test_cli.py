@@ -1,0 +1,25 @@
+import json
+
+from redundex.core.cli import main
+
+
+def test_scan_json_stats(make_tree, tmp_path, capsys):
+    root = make_tree({"a.bin": b"same", "b.bin": "same".encode()})
+    main(["scan", str(root), "--cache", str(tmp_path / "c.sqlite"), "--json"])
+    out = capsys.readouterr()
+    data = json.loads(out.out.splitlines()[-1])
+    assert data["stats"]["exact"]["matches"] == 1
+
+
+def test_scan_json_groups(make_tree, tmp_path, capsys):
+    root = make_tree({"a.bin": b"x", "b.bin": b"x"})
+    main([
+        "scan", str(root),
+        "--cache", str(tmp_path / "c.sqlite"),
+        "--no-image", "--no-video", "--no-audio", "--no-docs",
+        "--json",
+    ])
+    lines = capsys.readouterr().out.splitlines()
+    data = json.loads(lines[-1])
+    assert len(data["groups"]) == 1
+    assert data["groups"][0]["redundancy"] == 1
