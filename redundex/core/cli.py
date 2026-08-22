@@ -1,6 +1,7 @@
 import argparse
 import dataclasses
 import json
+import os
 import sys
 
 from .scan import Scan
@@ -42,12 +43,15 @@ def main(argv=None):
     p.add_argument("folder")
     p.add_argument("--cache", default=None)
     p.add_argument("--json", action="store_true")
-    for det in ("image", "video", "audio", "docs"):
+    for det in ("exact", "image", "video", "audio", "docs"):
         p.add_argument(f"--no-{det}", action="store_true")
     args = parser.parse_args(argv)
 
+    if args.cmd == "scan" and not os.path.isdir(args.folder):
+        parser.error(f"folder does not exist: {args.folder}")
+
     cfg = ScanConfig(cache_path=args.cache)
-    for det in ("image", "video", "audio", "docs"):
+    for det in ("exact", "image", "video", "audio", "docs"):
         if getattr(args, f"no_{det}"):
             setattr(cfg, det, False)
     result = Scan(args.folder, cfg, progress_cb=_progress).run()
@@ -67,7 +71,7 @@ def main(argv=None):
     if result.problems:
         print(f"{len(result.problems)} problems:")
         for p in result.problems:
-            print(f"    {p}")
+            print(f"    {p.get('path', '?')}: {p['error']}")
     if result.cancelled:
         print("scan cancelled")
     return 0

@@ -23,19 +23,29 @@ def build_groups(entries, matches, quality=None):
     for m in matches:
         if m.a in entries and m.b in entries:
             uf.union(m.a, m.b)
+    root_matches = {}
+    for m in matches:
+        if m.a in entries and m.b in entries:
+            root_matches.setdefault(uf.find(m.a), []).append(m)
     clusters = {}
     for path in entries:
         clusters.setdefault(uf.find(path), []).append(path)
     groups = []
-    for members in clusters.values():
+    for root, members in clusters.items():
         if len(members) < 2:
             continue
-        members.sort(
-            key=lambda p: (quality.get(p, entries[p].size), entries[p].mtime_ns),
-            reverse=True,
-        )
-        member_set = set(members)
-        gmatches = [m for m in matches if m.a in member_set and m.b in member_set]
+        use_quality = all(p in quality for p in members)
+        if use_quality:
+            members.sort(
+                key=lambda p: (quality[p], entries[p].mtime_ns),
+                reverse=True,
+            )
+        else:
+            members.sort(
+                key=lambda p: (entries[p].size, entries[p].mtime_ns),
+                reverse=True,
+            )
+        gmatches = root_matches.get(root, [])
         best_size = entries[members[0]].size
         redundancy = sum(entries[p].size for p in members) - best_size
         groups.append(

@@ -71,21 +71,24 @@ def match_from_fingerprints(fps):
                         detail="identical content",
                     )
                 )
-    exact_pairs = {(m.a, m.b) for m in matches}
     for group in by_listing.values():
         if len(group) > 1:
-            for i in range(len(group)):
-                for j in range(i + 1, len(group)):
-                    a, b = sorted((group[i], group[j]))
-                    if (a, b) in exact_pairs or fps[a][0] == fps[b][0]:
-                        continue
-                    matches.append(
-                        Match(
-                            a=a,
-                            b=b,
-                            reason=MatchReason.EXACT,
-                            score=1.0,
-                            detail="same archive contents",
-                        )
-                    )
+            sub_buckets = {}
+            for path in group:
+                sub_buckets.setdefault(fps[path][0], []).append(path)
+            buckets = list(sub_buckets.values())
+            for i in range(len(buckets)):
+                for j in range(i + 1, len(buckets)):
+                    for pa in buckets[i]:
+                        for pb in buckets[j]:
+                            a, b = sorted((pa, pb))
+                            matches.append(
+                                Match(
+                                    a=a,
+                                    b=b,
+                                    reason=MatchReason.EXACT,
+                                    score=1.0,
+                                    detail="same archive contents",
+                                )
+                            )
     return matches

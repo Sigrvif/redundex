@@ -38,6 +38,25 @@ def test_three_way_chain(make_tree):
     assert len(matches) == 2
 
 
+def test_two_identical_plus_one_repacked(make_tree):
+    import zipfile
+
+    root = make_tree({})
+    members = {"m.txt": b"aaa"}
+    for name in ("c1.zip", "c2.zip"):
+        with zipfile.ZipFile(root / name, "w", zipfile.ZIP_STORED) as z:
+            z.writestr("m.txt", members["m.txt"])
+    with zipfile.ZipFile(root / "repacked.zip", "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("m.txt", members["m.txt"])
+    fps, matches = _run(
+        [str(root / n) for n in ("c1.zip", "c2.zip", "repacked.zip")]
+    )
+    hash_matches = [m for m in matches if m.detail == "identical content"]
+    listing_matches = [m for m in matches if m.detail == "same archive contents"]
+    assert len(hash_matches) == 1
+    assert len(listing_matches) == 2
+
+
 def test_repacked_zip_matches_by_listing(tmp_path):
     members = {"m1.txt": b"aaa", "m2.txt": b"bbb"}
     stored = tmp_path / "stored.zip"

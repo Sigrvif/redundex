@@ -27,13 +27,13 @@ def run_jobs(fn, items, workers=None, cancel_event=None, progress_cb=None):
                     results.append(fut.result())
                 except concurrent.futures.BrokenExecutor as exc:
                     problems.append(
-                        {"item": None, "error": f"worker pool crashed: {exc}"}
+                        {"path": None, "error": f"worker pool crashed: {exc}"}
                     )
                     for f in futures:
                         f.cancel()
                     break
                 except Exception as exc:
-                    problems.append({"item": item, "error": str(exc)})
+                    problems.append({"path": item, "error": str(exc)})
                 done += 1
                 if progress_cb is not None:
                     progress_cb(done, len(items))

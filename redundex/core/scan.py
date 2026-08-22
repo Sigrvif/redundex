@@ -33,6 +33,9 @@ class Scan:
             return result
         try:
             self._progress("walk", 0, 1)
+            if self._cancelled():
+                result.cancelled = True
+                return result
             entries_list, problems = walk_folder(
                 self.root, follow_symlinks=cfg.follow_symlinks
             )

@@ -35,6 +35,18 @@ def test_quality_falls_back_to_size_and_newest():
     assert [m.path for m in groups[0].members] == ["/t/new", "/t/old"]
 
 
+def test_partial_quality_falls_back_to_size():
+    entries = {
+        e.path: e
+        for e in (_entry("small_new", 10, 9000), _entry("big_old", 20, 1000))
+    }
+    matches = [Match("/t/small_new", "/t/big_old", MatchReason.EXACT, 1.0)]
+    groups = build_groups(
+        entries, matches, quality={"/t/small_new": 5.0}
+    )
+    assert [m.path for m in groups[0].members] == ["/t/big_old", "/t/small_new"]
+
+
 def test_unmatched_files_excluded():
     entries = {e.path: e for e in (_entry("a", 1), _entry("lonely", 2))}
     groups = build_groups(entries, [])

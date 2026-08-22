@@ -23,3 +23,23 @@ def test_scan_json_groups(make_tree, tmp_path, capsys):
     data = json.loads(lines[-1])
     assert len(data["groups"]) == 1
     assert data["groups"][0]["redundancy"] == 1
+
+
+def test_scan_missing_folder_errors(tmp_path, capsys):
+    import pytest
+
+    with pytest.raises(SystemExit) as exc:
+        main(["scan", str(tmp_path / "nope"), "--json"])
+    assert exc.value.code == 2
+
+
+def test_scan_no_exact_flag(make_tree, tmp_path, capsys):
+    root = make_tree({"a.bin": b"x", "b.bin": b"x"})
+    main([
+        "scan", str(root),
+        "--cache", str(tmp_path / "c.sqlite"),
+        "--no-exact", "--json",
+    ])
+    data = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert "exact" not in data["stats"]
+    assert data["groups"] == []
