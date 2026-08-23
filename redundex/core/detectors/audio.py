@@ -81,7 +81,7 @@ def fpcalc_raw(path, length=120):
             hexdata = line.split("=", 1)[1].strip()
     if not hexdata:
         raise FpCalcError("no fingerprint in output")
-    subs = [int(hexdata[i * 8 : (i + 1) * 8], 16) for i in range(len(hexdata) // 8)]
+    subs = [int(part) for part in hexdata.split(",") if part]
     return subs, duration
 
 

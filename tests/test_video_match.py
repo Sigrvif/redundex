@@ -76,9 +76,9 @@ ffmpeg = pytest.mark.skipif(
 
 def _make(path, duration=20, size="320x240", src="testsrc", extra=()):
     cmd = ["ffmpeg", "-v", "error", "-f", "lavfi",
-           "-i", f"{src}=duration={duration}:size={size}:rate=10"]
+           "-i", f"{src}=size={size}:rate=10"]
     cmd.extend(extra)
-    cmd.extend(["-pix_fmt", "yuv420p", str(path)])
+    cmd.extend(["-t", str(duration), "-pix_fmt", "yuv420p", str(path)])
     subprocess.run(cmd, check=True)
     return str(path)
 
