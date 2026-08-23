@@ -60,9 +60,12 @@ class FpCalcError(Exception):
 
 
 def fpcalc_raw(path, length=120):
+    fpcalc = tools.which("fpcalc")
+    if fpcalc is None:
+        raise FpCalcError("fpcalc not installed")
     try:
         proc = subprocess.run(
-            ["fpcalc", "-raw", "-length", str(length), path],
+            [fpcalc, "-raw", "-length", str(length), path],
             capture_output=True, text=True, timeout=120,
         )
     except subprocess.TimeoutExpired as exc:
