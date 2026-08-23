@@ -35,10 +35,14 @@ Pick a folder, Scan, review groups (reason badges explain why files were grouped
 mark files (right-click a group for "mark all but ..." helpers), then
 "Move marked..." to a collection folder. "Undo last move" restores the last batch.
 
-The preview pane shows images, a video keyframe with a filmstrip, and an
-"Open in default player" button — double-clicking any file in the results list
-(or clicking a filmstrip frame) opens it with the system's default application,
-so you can judge videos in VLC or whatever player is registered.
+The preview pane shows images immediately and an "Open in default player"
+button — double-clicking any file in the results list opens it with the
+system's default application, so you can judge videos in VLC or whatever
+player is registered. Redundex never launches helper processes on its own:
+video filmstrips are only generated when you click "Load filmstrip", the
+result is cached alongside the fingerprints (per session in memory, and in
+the scan cache on disk), and loading another file never discards what was
+already loaded.
 
 ## CLI
 

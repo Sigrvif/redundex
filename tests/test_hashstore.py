@@ -96,3 +96,35 @@ def test_default_cache_location(make_tree):
     assert store.path.name == ".redundex.cache.sqlite"
     assert store.path.parent == root.resolve()
     store.close()
+
+
+def test_thumb_roundtrip_and_staleness(make_tree, tmp_path):
+    import os as _os
+
+    root = make_tree({"v.mp4": b"x" * 10})
+    entries = _first_entry(root)
+    path = str(root / "v.mp4")
+    store = HashStore(root, cache_path=str(tmp_path / "c.sqlite"))
+    store.save_files(entries)
+    assert store.get_thumb(path, 10, entries[path].mtime_ns) is None
+    store.put_thumb(path, b"jpegbytes")
+    assert store.get_thumb(path, 10, entries[path].mtime_ns) == b"jpegbytes"
+    entries[path] = entries[path].__class__(
+        path=path, size=10, mtime_ns=entries[path].mtime_ns + 5,
+        kind=entries[path].kind,
+    )
+    assert store.get_thumb(path, 10, entries[path].mtime_ns) is None
+    store.close()
+
+
+def test_thumb_pruned_with_file(make_tree, tmp_path):
+    root = make_tree({"a.mp4": b"1", "b.mp4": b"2"})
+    entries = _first_entry(root)
+    store = HashStore(root, cache_path=str(tmp_path / "c.sqlite"))
+    store.save_files(entries)
+    for p in entries:
+        store.put_thumb(p, b"j")
+    store.prune({str(root / "a.mp4")})
+    rows = store.db.execute("SELECT COUNT(*) FROM thumbs").fetchone()[0]
+    assert rows == 1
+    store.close()

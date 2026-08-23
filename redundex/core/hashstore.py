@@ -17,10 +17,12 @@ CREATE TABLE IF NOT EXISTS fp_audio(
     path TEXT PRIMARY KEY, raw BLOB, duration REAL);
 CREATE TABLE IF NOT EXISTS fp_doc(
     path TEXT PRIMARY KEY, text_hash TEXT, page1_phash INTEGER);
+CREATE TABLE IF NOT EXISTS thumbs(
+    path TEXT PRIMARY KEY, filmstrip BLOB);
 """
 
 _TABLES = frozenset(
-    {"files", "fp_exact", "fp_image", "fp_video", "fp_audio", "fp_doc"}
+    {"files", "fp_exact", "fp_image", "fp_video", "fp_audio", "fp_doc", "thumbs"}
 )
 
 
@@ -128,8 +130,26 @@ class HashStore:
             chunk = vanished[i : i + 500]
             marks = ",".join("?" * len(chunk))
             self.db.execute(f"DELETE FROM files WHERE path IN ({marks})", chunk)
-            for table in ("fp_exact", "fp_image", "fp_video", "fp_audio", "fp_doc"):
+            for table in ("fp_exact", "fp_image", "fp_video", "fp_audio",
+                          "fp_doc", "thumbs"):
                 self.db.execute(f"DELETE FROM {self._table(table)} WHERE path IN ({marks})", chunk)
+        self.db.commit()
+
+    def get_thumb(self, path, size, mtime_ns):
+        row = self.db.execute(
+            "SELECT f.size, f.mtime_ns, t.filmstrip FROM thumbs t "
+            "JOIN files f ON f.path = t.path WHERE t.path = ?",
+            (path,),
+        ).fetchone()
+        if row is None or row[0] != size or row[1] != mtime_ns:
+            return None
+        return row[2]
+
+    def put_thumb(self, path, filmstrip):
+        self.db.execute(
+            "INSERT OR REPLACE INTO thumbs(path, filmstrip) VALUES(?,?)",
+            (path, filmstrip),
+        )
         self.db.commit()
 
     def close(self):

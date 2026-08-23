@@ -7,6 +7,8 @@ from ..core.launch import open_path
 from ..core.tools import subprocess_flags
 from ..core.types import FileKind
 
+FRAME_W = 160
+
 
 class ThumbStripWorker(QtCore.QThread):
     thumbs_ready = QtCore.Signal(list)
@@ -16,44 +18,80 @@ class ThumbStripWorker(QtCore.QThread):
         self.path = path
         self.duration = duration
         self.count = count
+        self._stop = False
+        self._proc = None
+
+    def cancel(self):
+        self._stop = True
+        proc = self._proc
+        if proc is not None:
+            try:
+                proc.kill()
+            except OSError:
+                pass
 
     def run(self):
         images = []
         ffmpeg = tools.which("ffmpeg")
-        if ffmpeg is None:
+        if ffmpeg is None or self._stop:
             self.thumbs_ready.emit(images)
             return
         if self.duration > 0:
             times = [self.duration * (i + 0.5) / self.count for i in range(self.count)]
             for t in times:
-                pix = self._grab_at(t)
-                if pix is not None:
-                    images.append(pix)
+                if self._stop:
+                    break
+                img = self._grab_at(ffmpeg, t)
+                if img is not None:
+                    images.append(img)
         else:
-            raw = subprocess.run(
+            images = self._stream(ffmpeg)
+        self.thumbs_ready.emit(images)
+
+    def _grab_at(self, ffmpeg, t):
+        try:
+            proc = subprocess.Popen(
+                [ffmpeg, "-v", "error", "-ss", f"{t:.2f}", "-i", self.path,
+                 "-frames:v", "1", "-s", "160x90", "-f", "image2pipe",
+                 "-vcodec", "png", "-"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                creationflags=subprocess_flags(),
+            )
+        except OSError:
+            return None
+        self._proc = proc
+        try:
+            out, _ = proc.communicate(timeout=30)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return None
+        finally:
+            self._proc = None
+        img = QtGui.QImage.fromData(out)
+        return img if not img.isNull() else None
+
+    def _stream(self, ffmpeg):
+        try:
+            proc = subprocess.Popen(
                 [ffmpeg, "-v", "error", "-i", self.path,
                  "-vf", "fps=1/5,scale=160:90", "-frames:v", str(self.count),
                  "-f", "image2pipe", "-vcodec", "png", "-"],
-                capture_output=True,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                 creationflags=subprocess_flags(),
             )
-            if raw.returncode == 0:
-                images = _split_png_stream(raw.stdout)
-        self.thumbs_ready.emit(images)
-
-    def _grab_at(self, t):
-        ffmpeg = tools.which("ffmpeg")
-        if ffmpeg is None:
-            return None
-        proc = subprocess.run(
-            [ffmpeg, "-v", "error", "-ss", f"{t:.2f}", "-i", self.path,
-             "-frames:v", "1", "-s", "160x90", "-f", "image2pipe",
-             "-vcodec", "png", "-"],
-            capture_output=True,
-            creationflags=subprocess_flags(),
-        )
-        img = QtGui.QImage.fromData(proc.stdout)
-        return img if not img.isNull() else None
+        except OSError:
+            return []
+        self._proc = proc
+        try:
+            out, _ = proc.communicate(timeout=60)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return []
+        finally:
+            self._proc = None
+        return _split_png_stream(out)
 
 
 def _split_png_stream(data):
@@ -75,16 +113,56 @@ def _split_png_stream(data):
     return images
 
 
+def encode_strip(images):
+    if not images:
+        return None
+    height = images[0].height()
+    strip = QtGui.QImage(len(images) * FRAME_W, height, QtGui.QImage.Format_RGB32)
+    painter = QtGui.QPainter(strip)
+    x = 0
+    for img in images:
+        painter.drawImage(x, 0, img.convertToFormat(QtGui.QImage.Format_RGB32))
+        x += FRAME_W
+    painter.end()
+    buf = QtCore.QBuffer()
+    buf.open(QtCore.QIODevice.WriteOnly)
+    strip.save(buf, "JPG", 70)
+    return bytes(buf.data())
+
+
+def decode_strip(data):
+    img = QtGui.QImage.fromData(data)
+    if img.isNull() or img.width() < FRAME_W:
+        return []
+    n = img.width() // FRAME_W
+    return [
+        img.copy(i * FRAME_W, 0, FRAME_W, img.height()).convertToFormat(
+            QtGui.QImage.Format_RGB32
+        )
+        for i in range(n)
+    ]
+
+
 class PreviewPane(QtWidgets.QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, thumb_source=None, thumb_store=None):
         super().__init__(parent)
+        self._thumb_source = thumb_source
+        self._thumb_store = thumb_store
+        self._cache = {}
+        self._worker = None
+        self._current_entry = None
+        self._current_meta = {}
+
         self._label = QtWidgets.QLabel("No preview")
         self._label.setAlignment(QtCore.Qt.AlignCenter)
         self._open_btn = QtWidgets.QPushButton("Open in default player")
         self._open_btn.clicked.connect(self._open_current)
+        self._load_btn = QtWidgets.QPushButton("Load filmstrip")
+        self._load_btn.clicked.connect(self._load_filmstrip)
         self._note = QtWidgets.QLabel("")
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.addStretch(1)
+        btn_row.addWidget(self._load_btn)
         btn_row.addWidget(self._open_btn)
         btn_row.addStretch(1)
         self._strip_host = QtWidgets.QWidget()
@@ -94,16 +172,15 @@ class PreviewPane(QtWidgets.QWidget):
         layout.addLayout(btn_row)
         layout.addWidget(self._note)
         layout.addWidget(self._strip_host)
-        self._worker = None
-        self._thumb_workers = []
-        self._current = None
+        self._load_btn.hide()
 
     def set_file(self, entry, meta=None):
-        meta = meta or {}
-        self._current = entry.path
+        self._current_entry = entry
+        self._current_meta = meta or {}
         self._note.setText("")
         self._clear_strip()
         self._label.setPixmap(QtGui.QPixmap())
+        self._load_btn.hide()
         if entry.kind is FileKind.IMAGE:
             pix = QtGui.QPixmap(entry.path)
             if not pix.isNull():
@@ -119,29 +196,63 @@ class PreviewPane(QtWidgets.QWidget):
                 )
                 return
         self._label.setText(entry.path)
-        if entry.kind is FileKind.VIDEO and tools.which("ffmpeg") is not None:
-            self._thumb_workers = [
-                w for w in self._thumb_workers if w.isRunning()
-            ]
-            self._worker = ThumbStripWorker(entry.path, meta.get("duration", 0.0))
-            self._worker.thumbs_ready.connect(self._show_thumbs)
-            self._worker.start()
-            self._thumb_workers.append(self._worker)
+        if entry.kind is FileKind.VIDEO:
+            imgs = self._cache.get(entry.path)
+            if imgs is None and self._thumb_source is not None:
+                data = self._thumb_source(entry.path)
+                if data is not None:
+                    imgs = decode_strip(data)
+                    if imgs:
+                        self._cache[entry.path] = imgs
+            if imgs:
+                self._display_thumbs(imgs)
+            elif tools.which("ffmpeg") is not None:
+                self._load_btn.show()
+
+    def _load_filmstrip(self):
+        entry = self._current_entry
+        if entry is None or entry.kind is not FileKind.VIDEO:
+            return
+        self._load_btn.hide()
+        imgs = self._cache.get(entry.path)
+        if imgs:
+            self._display_thumbs(imgs)
+            return
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.wait(3000)
+        self._note.setText("Loading filmstrip...")
+        worker = ThumbStripWorker(
+            entry.path, self._current_meta.get("duration", 0.0)
+        )
+        worker.thumbs_ready.connect(
+            lambda images, p=entry.path: self._on_thumbs(p, images)
+        )
+        self._worker = worker
+        worker.start()
+
+    def _on_thumbs(self, path, images):
+        self._note.setText("")
+        if not images:
+            return
+        self._cache[path] = images
+        if self._thumb_store is not None:
+            data = encode_strip(images)
+            if data is not None:
+                self._thumb_store(path, data)
+        if self._current_entry is not None and self._current_entry.path == path:
+            self._display_thumbs(images)
 
     def _open_current(self):
-        if self._current is None:
+        if self._current_entry is None:
             return
-        if not open_path(self._current):
+        if not open_path(self._current_entry.path):
             self._note.setText("No system handler found for this file")
-
-    def _show_thumbs(self, images):
-        if self.sender() is not self._worker:
-            return
-        self._display_thumbs(images)
 
     def _display_thumbs(self, images):
         if not images:
             return
+        self._load_btn.hide()
         middle = QtGui.QPixmap.fromImage(images[len(images) // 2])
         target = self._label.size()
         if target.width() < 2 or target.height() < 2:
@@ -153,12 +264,13 @@ class PreviewPane(QtWidgets.QWidget):
                 QtCore.Qt.SmoothTransformation,
             )
         )
+        path = self._current_entry.path if self._current_entry else ""
         for img in images:
             btn = QtWidgets.QToolButton()
             btn.setIcon(QtGui.QIcon(QtGui.QPixmap.fromImage(img)))
-            btn.setIconSize(QtCore.QSize(160, 90))
+            btn.setIconSize(QtCore.QSize(FRAME_W, 90))
             btn.setAutoRaise(True)
-            btn.setToolTip(self._current or "")
+            btn.setToolTip(path)
             btn.clicked.connect(self._open_current)
             self._strip.addWidget(btn)
 

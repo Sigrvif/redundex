@@ -1,6 +1,9 @@
+import os
+
 from PySide6 import QtCore, QtWidgets
 
 from ..core import capabilities as caps
+from ..core.hashstore import HashStore
 from ..core.launch import open_path
 from ..core.scan import Scan
 from ..core.trash import move_batch, undo_last
@@ -279,7 +282,11 @@ class MainWindow(QtWidgets.QMainWindow):
         if not hasattr(self, "preview_pane"):
             from .preview import PreviewPane
 
-            self.preview_pane = PreviewPane(self)
+            self.preview_pane = PreviewPane(
+                self,
+                thumb_source=self._load_thumb,
+                thumb_store=self._save_thumb,
+            )
             dock = QtWidgets.QDockWidget("Preview", self)
             dock.setWidget(self.preview_pane)
             self.addDockWidget(QtCore.Qt.RightDockWidgetArea, dock)
@@ -288,8 +295,25 @@ class MainWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         if self._worker is not None and self._worker.isRunning():
             self._worker.cancel()
-            self._worker.wait()
+            self._worker.wait(10000)
         if hasattr(self, "preview_pane"):
-            for w in list(self.preview_pane._thumb_workers):
-                w.wait()
+            w = self.preview_pane._worker
+            if w is not None and w.isRunning():
+                w.cancel()
+                w.wait(5000)
         super().closeEvent(event)
+
+    def _load_thumb(self, path):
+        try:
+            st = os.stat(path)
+            with HashStore(self._root) as store:
+                return store.get_thumb(path, st.st_size, st.st_mtime_ns)
+        except Exception:
+            return None
+
+    def _save_thumb(self, path, data):
+        try:
+            with HashStore(self._root) as store:
+                store.put_thumb(path, data)
+        except Exception:
+            pass
