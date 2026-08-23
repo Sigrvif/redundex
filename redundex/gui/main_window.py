@@ -1,6 +1,7 @@
 from PySide6 import QtCore, QtWidgets
 
 from ..core import capabilities as caps
+from ..core.launch import open_path
 from ..core.scan import Scan
 from ..core.trash import move_batch, undo_last
 from ..core.types import ScanConfig, format_size
@@ -99,6 +100,7 @@ class MainWindow(QtWidgets.QMainWindow):
         compare_btn.clicked.connect(self._compare_selected)
         problems_btn.clicked.connect(self._show_problems)
         self.tree.customContextMenuRequested.connect(self._context_menu)
+        self.tree.doubleClicked.connect(self._open_clicked)
         self.tree.selectionModel().currentChanged.connect(self._preview_current)
         self._last_result = None
 
@@ -261,6 +263,13 @@ class MainWindow(QtWidgets.QMainWindow):
         ):
             menu.addAction(label, lambda k=key: self.model.mark_except(node[1], k))
         menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _open_clicked(self, index):
+        node = index.internalPointer() if index.isValid() else None
+        if not node or node[0] != "member":
+            return
+        entry = self.model.group_at_row(node[1]).members[node[2]]
+        open_path(entry.path)
 
     def _preview_current(self, current, _previous):
         node = current.internalPointer() if current.isValid() else None

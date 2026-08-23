@@ -35,6 +35,11 @@ Pick a folder, Scan, review groups (reason badges explain why files were grouped
 mark files (right-click a group for "mark all but ..." helpers), then
 "Move marked..." to a collection folder. "Undo last move" restores the last batch.
 
+The preview pane shows images, a video keyframe with a filmstrip, and an
+"Open in default player" button — double-clicking any file in the results list
+(or clicking a filmstrip frame) opens it with the system's default application,
+so you can judge videos in VLC or whatever player is registered.
+
 ## CLI
 
 ```bash

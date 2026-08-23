@@ -4,6 +4,7 @@ import subprocess
 import numpy
 import pytest
 from PIL import Image
+from PySide6 import QtGui
 
 from redundex.core.types import FileEntry, FileKind
 from redundex.gui.preview import CompareDialog, PreviewPane, ThumbStripWorker
@@ -44,6 +45,7 @@ def test_thumb_strip_worker(qtbot, tmp_path):
     with qtbot.waitSignal(worker.thumbs_ready, timeout=60000) as blocker:
         worker.start()
     assert len(blocker.args[0]) == 6
+    worker.wait()
 
 
 def test_compare_dialog_smoke(qtbot, tmp_path):
@@ -54,3 +56,49 @@ def test_compare_dialog_smoke(qtbot, tmp_path):
     ]
     dlg = CompareDialog(entries, {})
     qtbot.addWidget(dlg)
+
+
+def _qimage():
+    img = QtGui.QImage(160, 90, QtGui.QImage.Format_Grayscale8)
+    img.fill(120)
+    return img
+
+
+def test_preview_middle_frame_and_clickable_thumbs(qtbot, tmp_path, monkeypatch):
+    import redundex.gui.preview as preview_mod
+
+    calls = []
+    monkeypatch.setattr(preview_mod, "open_path", lambda p: calls.append(p) or True)
+    monkeypatch.setattr(preview_mod.tools, "which", lambda name: None)
+    pane = preview_mod.PreviewPane()
+    qtbot.addWidget(pane)
+    pane.resize(400, 300)
+    entry = FileEntry(
+        path=str(tmp_path / "v.mp4"), size=10, mtime_ns=1, kind=FileKind.VIDEO
+    )
+    pane.set_file(entry, {"duration": 12.0})
+    pane._display_thumbs([_qimage(), _qimage(), _qimage()])
+    assert not pane._label.pixmap().isNull()
+    buttons = [
+        pane._strip.itemAt(i).widget() for i in range(pane._strip.count())
+    ]
+    assert len(buttons) == 3
+    buttons[1].click()
+    assert calls == [str(tmp_path / "v.mp4")]
+
+
+def test_preview_open_button_reports_missing_handler(qtbot, tmp_path, monkeypatch):
+    import redundex.gui.preview as preview_mod
+
+    monkeypatch.setattr(preview_mod, "open_path", lambda p: False)
+    monkeypatch.setattr(preview_mod.tools, "which", lambda name: None)
+    pane = preview_mod.PreviewPane()
+    qtbot.addWidget(pane)
+    pane.set_file(
+        FileEntry(
+            path=str(tmp_path / "v.mp4"), size=10, mtime_ns=1,
+            kind=FileKind.VIDEO,
+        )
+    )
+    pane._open_btn.click()
+    assert "No system handler" in pane._note.text()

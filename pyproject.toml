@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "redundex"
-version = "0.3.1"
+version = "0.3.2"
 description = "Find redundant files: duplicates, resizes, re-encodes, contained clips"
 requires-python = ">=3.10"
 dependencies = [

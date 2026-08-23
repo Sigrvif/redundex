@@ -54,3 +54,24 @@ def test_detector_toggles_reflect_capabilities(qtbot, monkeypatch):
     assert not win.audio_check.isEnabled()
     assert not win.docs_check.isEnabled()
     assert win.exact_check.isEnabled()
+
+
+def test_double_click_opens_file(qtbot, monkeypatch):
+    import redundex.gui.main_window as mw_mod
+    from redundex.core.types import FileEntry, FileKind, Group, Match, MatchReason, ScanResult
+
+    opened = []
+    monkeypatch.setattr(mw_mod, "open_path", lambda p: opened.append(p) or True)
+    win = MainWindow()
+    qtbot.addWidget(win)
+    entry = FileEntry(path="/t/clip.mp4", size=5, mtime_ns=1, kind=FileKind.VIDEO)
+    group = Group(
+        members=[entry],
+        matches=[],
+        redundancy=0,
+    )
+    win.model.set_result(ScanResult(groups=[group], meta={}))
+    idx = win.model.index(0, 0, win.model.index(0, 0))
+    win._open_clicked(idx)
+    assert opened == ["/t/clip.mp4"]
+    win.close()
