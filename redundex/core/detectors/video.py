@@ -48,32 +48,43 @@ def probe(path):
     }
 
 
-def sample_frames(path, duration, interval=5.0, max_frames=200):
+def _extract(path, interval, count, skip_keyframes):
     ffmpeg = tools.which("ffmpeg")
     if ffmpeg is None:
         raise ProbeError("ffmpeg not installed")
-    if duration <= 0:
-        count = 1
-    else:
-        interval = max(interval, duration / max_frames)
-        count = min(max_frames, int(duration / interval) + 1)
+    cmd = [ffmpeg, "-v", "error", "-threads", "1"]
+    if skip_keyframes:
+        cmd += ["-skip_frame", "nokey"]
+    cmd += [
+        "-i", path,
+        "-vf", f"fps=1/{interval},scale={FRAME_W}:{FRAME_H}",
+        "-frames:v", str(count), "-f", "rawvideo", "-pix_fmt", "gray", "-",
+    ]
     try:
-        proc = subprocess.run(
-            [ffmpeg, "-v", "error", "-i", path,
-             "-vf", f"fps=1/{interval},scale={FRAME_W}:{FRAME_H}",
-             "-frames:v", str(count), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
-            capture_output=True, timeout=300,
-        )
+        proc = subprocess.run(cmd, capture_output=True, timeout=300)
     except subprocess.TimeoutExpired as exc:
         raise ProbeError("frame extraction timed out") from exc
     if proc.returncode != 0:
         raise ProbeError("frame extraction failed")
     frame_size = FRAME_W * FRAME_H
     buf = numpy.frombuffer(proc.stdout, dtype=numpy.uint8)
-    hashes = [
+    return [
         hash_gray_frame(buf[i * frame_size:(i + 1) * frame_size].reshape(FRAME_H, FRAME_W))
         for i in range(len(buf) // frame_size)
     ]
+
+
+def sample_frames(path, duration, interval=5.0, max_frames=200):
+    if duration <= 0:
+        count = 1
+    else:
+        interval = max(interval, duration / max_frames)
+        count = min(max_frames, int(duration / interval) + 1)
+    hashes = _extract(path, interval, count, skip_keyframes=True)
+    distinct = len(set(hashes))
+    floor = max(8, count // 4)
+    if duration > 0 and distinct < floor:
+        hashes = _extract(path, interval, count, skip_keyframes=False)
     return hashes, interval
 
 
