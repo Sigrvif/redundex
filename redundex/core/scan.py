@@ -1,6 +1,5 @@
 import functools
 import multiprocessing as mp
-import shutil
 import struct
 import time
 
@@ -10,6 +9,7 @@ from .detectors.audio import fpcalc_job, match_audio, unpack_subs
 from .detectors.docs import doc_job, match_docs
 from .detectors.image import match_images
 from .detectors.imagehash import from_signed64, image_job, to_signed64
+from . import tools
 from .detectors.video import coarse_signature, match_videos, video_job
 from .hashstore import HashStore
 from .pool import CancelledScan, run_jobs
@@ -200,7 +200,7 @@ class Scan:
         cfg = self.config
         t0 = time.monotonic()
         videos = [e for e in entries.values() if e.kind is FileKind.VIDEO]
-        if shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None:
+        if tools.which("ffmpeg") is None or tools.which("ffprobe") is None:
             result.stats["video"] = {
                 "files": len(videos),
                 "hashed": 0,
@@ -283,7 +283,7 @@ class Scan:
             for e in entries.values()
             if e.kind in (FileKind.AUDIO, FileKind.VIDEO)
         ]
-        if shutil.which("fpcalc") is None:
+        if tools.which("fpcalc") is None:
             result.stats["audio"] = {
                 "files": len(targets),
                 "hashed": 0,

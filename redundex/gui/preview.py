@@ -1,8 +1,8 @@
-import shutil
 import subprocess
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from ..core import tools
 from ..core.types import FileKind
 
 
@@ -17,6 +17,10 @@ class ThumbStripWorker(QtCore.QThread):
 
     def run(self):
         images = []
+        ffmpeg = tools.which("ffmpeg")
+        if ffmpeg is None:
+            self.thumbs_ready.emit(images)
+            return
         if self.duration > 0:
             times = [self.duration * (i + 0.5) / self.count for i in range(self.count)]
             for t in times:
@@ -25,7 +29,7 @@ class ThumbStripWorker(QtCore.QThread):
                     images.append(pix)
         else:
             raw = subprocess.run(
-                ["ffmpeg", "-v", "error", "-i", self.path,
+                [ffmpeg, "-v", "error", "-i", self.path,
                  "-vf", "fps=1/5,scale=160:90", "-frames:v", str(self.count),
                  "-f", "image2pipe", "-vcodec", "png", "-"],
                 capture_output=True,
@@ -35,8 +39,11 @@ class ThumbStripWorker(QtCore.QThread):
         self.thumbs_ready.emit(images)
 
     def _grab_at(self, t):
+        ffmpeg = tools.which("ffmpeg")
+        if ffmpeg is None:
+            return None
         proc = subprocess.run(
-            ["ffmpeg", "-v", "error", "-ss", f"{t:.2f}", "-i", self.path,
+            [ffmpeg, "-v", "error", "-ss", f"{t:.2f}", "-i", self.path,
              "-frames:v", "1", "-s", "160x90", "-f", "image2pipe",
              "-vcodec", "png", "-"],
             capture_output=True,
@@ -96,7 +103,7 @@ class PreviewPane(QtWidgets.QWidget):
                 )
                 return
         self._label.setText(entry.path)
-        if entry.kind is FileKind.VIDEO and shutil.which("ffmpeg"):
+        if entry.kind is FileKind.VIDEO and tools.which("ffmpeg") is not None:
             self._thumb_workers = [
                 w for w in self._thumb_workers if w.isRunning()
             ]

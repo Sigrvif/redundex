@@ -3,6 +3,7 @@ import subprocess
 
 import numpy
 
+from .. import tools
 from ..types import Match, MatchReason
 from .imagehash import hamming, hash_gray_frame
 
@@ -14,9 +15,12 @@ class ProbeError(Exception):
 
 
 def probe(path):
+    ffprobe = tools.which("ffprobe")
+    if ffprobe is None:
+        raise ProbeError("ffprobe not installed")
     try:
         proc = subprocess.run(
-            ["ffprobe", "-v", "error", "-print_format", "json",
+            [ffprobe, "-v", "error", "-print_format", "json",
              "-show_format", "-show_streams", path],
             capture_output=True, text=True, timeout=30,
         )
@@ -45,6 +49,9 @@ def probe(path):
 
 
 def sample_frames(path, duration, interval=5.0, max_frames=200):
+    ffmpeg = tools.which("ffmpeg")
+    if ffmpeg is None:
+        raise ProbeError("ffmpeg not installed")
     if duration <= 0:
         count = 1
     else:
@@ -52,7 +59,7 @@ def sample_frames(path, duration, interval=5.0, max_frames=200):
         count = min(max_frames, int(duration / interval) + 1)
     try:
         proc = subprocess.run(
-            ["ffmpeg", "-v", "error", "-i", path,
+            [ffmpeg, "-v", "error", "-i", path,
              "-vf", f"fps=1/{interval},scale={FRAME_W}:{FRAME_H}",
              "-frames:v", str(count), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
             capture_output=True, timeout=300,

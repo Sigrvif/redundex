@@ -129,9 +129,9 @@ def test_scan_image_stage_groups_resizes(make_tree, tmp_path_factory):
 
 
 def test_scan_video_stage_skips_without_tools(tmp_path, tmp_path_factory, monkeypatch):
-    import shutil as _shutil
+    from redundex.core import tools
 
-    monkeypatch.setattr(_shutil, "which", lambda name: None)
+    monkeypatch.setattr(tools, "which", lambda name: None)
     (tmp_path / "fake.mp4").write_bytes(b"x")
     cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
     cfg = ScanConfig(cache_path=cache, image=False, audio=False, docs=False)

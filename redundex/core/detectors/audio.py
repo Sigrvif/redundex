@@ -1,6 +1,7 @@
 import struct
 import subprocess
 
+from .. import tools
 from ..types import Match, MatchReason
 
 

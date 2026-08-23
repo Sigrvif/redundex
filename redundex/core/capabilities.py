@@ -1,11 +1,12 @@
 import importlib.util
-import shutil
+
+from . import tools
 
 
 def check_capabilities():
     return {
-        "video": bool(shutil.which("ffmpeg") and shutil.which("ffprobe")),
-        "audio": bool(shutil.which("fpcalc")),
+        "video": bool(tools.which("ffmpeg") and tools.which("ffprobe")),
+        "audio": bool(tools.which("fpcalc")),
         "pdf": importlib.util.find_spec("pymupdf") is not None,
     }
 
