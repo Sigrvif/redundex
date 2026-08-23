@@ -12,6 +12,9 @@ def _candidate_dirs():
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
         dirs.append(os.path.join(exe_dir, "tools"))
         dirs.append(os.path.join(exe_dir, "_internal", "tools"))
+    exe = getattr(sys, "executable", "")
+    if exe:
+        exe_dir = os.path.dirname(os.path.abspath(exe))
         dirs.append(os.path.join(os.path.dirname(exe_dir), "tools"))
     here = os.path.abspath(__file__)
     root = os.path.dirname(os.path.dirname(os.path.dirname(here)))

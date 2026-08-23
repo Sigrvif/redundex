@@ -27,6 +27,16 @@ def test_bundled_tools_internal_dir_frozen(monkeypatch, tmp_path):
     assert tools.which("fpcalc") == str(fpcalc)
 
 
+def test_portable_python_parent_tools_dir(monkeypatch, tmp_path):
+    root = tmp_path / "portable"
+    (root / "tools").mkdir(parents=True)
+    fpcalc = root / "tools" / "fpcalc"
+    fpcalc.write_bytes(b"#!/bin/sh\n")
+    monkeypatch.setattr(sys, "frozen", False, raising=False)
+    monkeypatch.setattr(sys, "executable", str(root / "python" / "python.exe"))
+    assert tools.which("fpcalc") == str(fpcalc)
+
+
 def test_env_var_overrides(monkeypatch, tmp_path):
     custom = tmp_path / "custom-tools"
     custom.mkdir()

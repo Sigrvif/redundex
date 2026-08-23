@@ -43,6 +43,26 @@ python -m redundex.core.cli move /path/to/collection file1 file2
 python -m redundex.core.cli undo /path/to/collection
 ```
 
+## Offline, self-contained bundles
+
+Prebuilt bundles ship with ffmpeg, ffprobe, and fpcalc included — no Python, no
+tools on PATH, no internet connection needed on the target machine:
+
+- `redundex-0.2.0-linux-x86_64.tar.gz` — PyInstaller one-folder build with
+  statically linked tools. Runs on any x86_64 Linux with glibc >= the build
+  host's (Arch Linux included). Extract, then run
+  `./redundex-0.2.0-linux-x86_64/redundex` (GUI) or
+  `./redundex-0.2.0-linux-x86_64/redundex-cli scan ...`.
+- `redundex-0.2.0-win64.zip` — portable folder with an embeddable Python,
+  all dependencies, and bundled `ffmpeg.exe`/`ffprobe.exe`/`fpcalc.exe`.
+  Extract anywhere, then double-click `Redundex.bat` (GUI) or run
+  `RedundexCLI.bat scan ...` for the CLI.
+
+Bundled tools are found automatically next to the executable; a custom tools
+directory can be forced with the `REDUNDEX_TOOLS` environment variable. The
+bundles contain GPL/LGPL builds of ffmpeg and chromaprint — keep that in mind
+when redistributing.
+
 ## Fingerprints and caching
 
 Perceptual fingerprints are cached in a SQLite database next to the scanned folder
