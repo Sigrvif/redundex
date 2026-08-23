@@ -2,6 +2,7 @@ import struct
 import subprocess
 
 from .. import tools
+from ..tools import subprocess_flags
 from ..types import Match, MatchReason
 
 
@@ -67,6 +68,7 @@ def fpcalc_raw(path, length=120):
         proc = subprocess.run(
             [fpcalc, "-raw", "-length", str(length), path],
             capture_output=True, text=True, timeout=120,
+            creationflags=subprocess_flags(),
         )
     except subprocess.TimeoutExpired as exc:
         raise FpCalcError("fpcalc timed out") from exc

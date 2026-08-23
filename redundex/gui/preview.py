@@ -3,6 +3,7 @@ import subprocess
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from ..core import tools
+from ..core.tools import subprocess_flags
 from ..core.types import FileKind
 
 
@@ -33,6 +34,7 @@ class ThumbStripWorker(QtCore.QThread):
                  "-vf", "fps=1/5,scale=160:90", "-frames:v", str(self.count),
                  "-f", "image2pipe", "-vcodec", "png", "-"],
                 capture_output=True,
+                creationflags=subprocess_flags(),
             )
             if raw.returncode == 0:
                 images = _split_png_stream(raw.stdout)
@@ -47,6 +49,7 @@ class ThumbStripWorker(QtCore.QThread):
              "-frames:v", "1", "-s", "160x90", "-f", "image2pipe",
              "-vcodec", "png", "-"],
             capture_output=True,
+            creationflags=subprocess_flags(),
         )
         img = QtGui.QImage.fromData(proc.stdout)
         return img if not img.isNull() else None

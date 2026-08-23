@@ -4,6 +4,7 @@ import subprocess
 import numpy
 
 from .. import tools
+from ..tools import subprocess_flags
 from ..types import Match, MatchReason
 from .imagehash import hamming, hash_gray_frame
 
@@ -23,6 +24,7 @@ def probe(path):
             [ffprobe, "-v", "error", "-print_format", "json",
              "-show_format", "-show_streams", path],
             capture_output=True, text=True, timeout=30,
+            creationflags=subprocess_flags(),
         )
     except subprocess.TimeoutExpired as exc:
         raise ProbeError("ffprobe timed out") from exc
@@ -61,7 +63,10 @@ def _extract(path, interval, count, skip_keyframes):
         "-frames:v", str(count), "-f", "rawvideo", "-pix_fmt", "gray", "-",
     ]
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=300)
+        proc = subprocess.run(
+            cmd, capture_output=True, timeout=300,
+            creationflags=subprocess_flags(),
+        )
     except subprocess.TimeoutExpired as exc:
         raise ProbeError("frame extraction timed out") from exc
     if proc.returncode != 0:

@@ -3,6 +3,15 @@ import shutil
 import sys
 
 
+CREATE_NO_WINDOW = 0x08000000
+
+
+def subprocess_flags():
+    if os.name == "nt":
+        return CREATE_NO_WINDOW
+    return 0
+
+
 def _candidate_dirs():
     dirs = []
     env = os.environ.get("REDUNDEX_TOOLS")

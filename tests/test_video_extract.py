@@ -10,9 +10,11 @@ class _Recorder:
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = []
+        self.kwargs = []
 
     def __call__(self, cmd, **kwargs):
         self.calls.append(list(cmd))
+        self.kwargs.append(kwargs)
         resp = self.responses.pop(0)
         return SimpleNamespace(
             returncode=resp.get("returncode", 0), stdout=resp.get("stdout", b"")
@@ -39,6 +41,7 @@ def test_sample_frames_decodes_keyframes_only(monkeypatch):
     i = cmd.index("-i")
     assert cmd[i - 2 : i] == ["-skip_frame", "nokey"]
     assert "-threads" in cmd and cmd[cmd.index("-threads") + 1] == "1"
+    assert "creationflags" in rec.kwargs[0]
 
 
 def test_sample_frames_falls_back_on_sparse_keyframes(monkeypatch):
@@ -77,3 +80,40 @@ def test_sample_frames_error(monkeypatch):
     monkeypatch.setattr(video.tools, "which", lambda name: "/bin/ffmpeg")
     with pytest.raises(video.ProbeError):
         video.sample_frames("v.mp4", 100.0)
+
+
+def test_probe_passes_creationflags(monkeypatch):
+    import json as _json
+
+    payload = _json.dumps(
+        {"format": {"duration": "10"}, "streams": [{"codec_type": "video", "width": 2, "height": 2}]}
+    ).encode()
+    rec = _Recorder([{"stdout": payload}])
+    monkeypatch.setattr(video.subprocess, "run", rec)
+    monkeypatch.setattr(video.tools, "which", lambda name: "/bin/ffprobe")
+    info = video.probe("v.mp4")
+    assert info["duration"] == 10.0
+    assert "creationflags" in rec.kwargs[0]
+
+
+def test_fpcalc_raw_passes_creationflags(monkeypatch):
+    import subprocess as _subprocess
+    from redundex.core.detectors import audio
+
+    class _Rec:
+        def __init__(self):
+            self.kwargs = None
+
+        def __call__(self, cmd, **kwargs):
+            self.kwargs = kwargs
+            return SimpleNamespace(
+                returncode=0,
+                stdout="DURATION=10\nFINGERPRINT=1,2,3\n",
+            )
+
+    rec = _Rec()
+    monkeypatch.setattr(audio.subprocess, "run", rec)
+    monkeypatch.setattr(audio.tools, "which", lambda name: "/bin/fpcalc")
+    subs, duration = audio.fpcalc_raw("t.mp3")
+    assert subs == [1, 2, 3] and duration == 10.0
+    assert "creationflags" in rec.kwargs

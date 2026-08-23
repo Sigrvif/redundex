@@ -85,3 +85,13 @@ def test_source_tree_tools_dir(monkeypatch, tmp_path):
     monkeypatch.setattr(tools, "__file__", str(pkg / "tools.py"))
     monkeypatch.setattr(tools.shutil, "which", lambda name: None)
     assert tools.which("ffmpeg") == str(ffmpeg)
+
+
+def test_subprocess_flags_posix(monkeypatch):
+    monkeypatch.setattr(tools.os, "name", "posix")
+    assert tools.subprocess_flags() == 0
+
+
+def test_subprocess_flags_windows(monkeypatch):
+    monkeypatch.setattr(tools.os, "name", "nt")
+    assert tools.subprocess_flags() == tools.CREATE_NO_WINDOW
