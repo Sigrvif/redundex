@@ -39,6 +39,7 @@ mark files (right-click a group for "mark all but ..." helpers), then
 
 ```bash
 python -m redundex.core.cli scan /path/to/folder --cache /path/cache.sqlite --json
+python -m redundex.core.cli scan /path/to/folder --limit 500
 python -m redundex.core.cli move /path/to/collection file1 file2
 python -m redundex.core.cli undo /path/to/collection
 ```
@@ -62,6 +63,20 @@ Bundled tools are found automatically next to the executable; a custom tools
 directory can be forced with the `REDUNDEX_TOOLS` environment variable. The
 bundles contain GPL/LGPL builds of ffmpeg and chromaprint — keep that in mind
 when redistributing.
+
+## Pause, resume, and chunking
+
+Long scans are interruptible at any point — cancel in the GUI, close the window,
+or Ctrl-C the CLI. Fingerprints are written to the cache in small batches while
+the scan runs, so a paused scan loses at most the few files in flight, and
+running the scan again resumes exactly where it left off (already-fingerprinted
+files are skipped, no matter how the previous run ended).
+
+For very large libraries you can also chunk explicitly: limit how many new
+files are fingerprinted per detector stage with `--limit N` on the CLI or the
+"max new" spinner in the GUI, and repeat until a scan reports nothing new.
+Progress and results are identical either way — chunked and resumed scans
+produce the same groups as one uninterrupted scan.
 
 ## Fingerprints and caching
 

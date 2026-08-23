@@ -64,6 +64,7 @@ class ScanConfig:
     audio_ber: float = 0.30
     docs: bool = True
     workers: int | None = None
+    batch_limit: int | None = None
 
 
 @dataclass

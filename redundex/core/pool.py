@@ -7,7 +7,8 @@ class CancelledScan(Exception):
     pass
 
 
-def run_jobs(fn, items, workers=None, cancel_event=None, progress_cb=None):
+def run_jobs(fn, items, workers=None, cancel_event=None, progress_cb=None,
+             result_cb=None):
     results = []
     problems = []
     items = list(items)
@@ -26,12 +27,16 @@ def run_jobs(fn, items, workers=None, cancel_event=None, progress_cb=None):
                 raise CancelledScan()
             item = futures[fut]
             try:
-                results.append(fut.result())
+                result = fut.result()
             except concurrent.futures.BrokenExecutor as exc:
                 problems.append({"path": None, "error": f"worker pool crashed: {exc}"})
                 break
             except Exception as exc:
                 problems.append({"path": item, "error": str(exc)})
+            else:
+                results.append(result)
+                if result_cb is not None:
+                    result_cb(result)
             done += 1
             if progress_cb is not None:
                 progress_cb(done, len(items))

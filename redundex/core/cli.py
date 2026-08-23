@@ -38,6 +38,10 @@ def main(argv=None):
     p.add_argument("folder")
     p.add_argument("--cache", default=None)
     p.add_argument("--json", action="store_true")
+    p.add_argument(
+        "--limit", type=int, default=None,
+        help="max new files to fingerprint per detector stage (chunked scanning)",
+    )
     for det in ("exact", "image", "video", "audio", "docs"):
         p.add_argument(f"--no-{det}", action="store_true")
     p = sub.add_parser("move", help="move files to the collection folder")
@@ -76,7 +80,7 @@ def main(argv=None):
         names = ", ".join(k for k in ("video", "audio", "pdf") if k in missing)
         sys.stderr.write(f"note: detectors disabled (tools missing): {names}\n")
 
-    cfg = ScanConfig(cache_path=args.cache)
+    cfg = ScanConfig(cache_path=args.cache, batch_limit=args.limit)
     for det in ("exact", "image", "video", "audio", "docs"):
         if getattr(args, f"no_{det}"):
             setattr(cfg, det, False)
@@ -99,7 +103,7 @@ def main(argv=None):
         for p in result.problems:
             print(f"    {p.get('path', '?')}: {p['error']}")
     if result.cancelled:
-        print("scan cancelled")
+        print("scan paused - progress saved, run again to resume")
     return 0
 
 

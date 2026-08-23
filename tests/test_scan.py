@@ -222,3 +222,111 @@ def test_scan_audio_stage(tmp_path, tmp_path_factory):
     assert result.stats["audio"]["matches"] == 1
     result2 = Scan(str(tmp_path), cfg).run()
     assert result2.stats["audio"]["hashed"] == 0
+
+
+def test_scan_cancel_preserves_exact_progress(make_tree, tmp_path_factory):
+    root = make_tree(
+        {"a.bin": b"aaa1", "b.bin": b"bbb2", "c.bin": b"ccc3", "d.bin": b"ddd4"}
+    )
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = _cfg(cache)
+    ev = mp.Event()
+
+    def maybe_cancel(stage, done, total):
+        if stage == "exact" and done >= 1:
+            ev.set()
+
+    result = Scan(root, cfg, progress_cb=maybe_cancel, cancel_event=ev).run()
+    assert result.cancelled is True
+
+    result2 = Scan(root, cfg).run()
+    assert not result2.cancelled
+    assert result2.stats["exact"]["hashed"] == 3
+
+
+def test_scan_cancel_after_modify_no_stale(make_tree, tmp_path_factory):
+    root = make_tree({"a.bin": b"xx", "z.bin": b"xx"})
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = _cfg(cache)
+    assert len(Scan(root, cfg).run().groups) == 1
+
+    (root / "z.bin").write_bytes(b"yy")
+    os.utime(root / "z.bin")
+    ev = mp.Event()
+
+    def cancel_at_exact_start(stage, done, total):
+        if stage == "exact":
+            ev.set()
+
+    result = Scan(
+        root, cfg, progress_cb=cancel_at_exact_start, cancel_event=ev
+    ).run()
+    assert result.cancelled is True
+
+    result2 = Scan(root, cfg).run()
+    assert result2.stats["exact"]["hashed"] == 1
+    assert result2.groups == []
+
+
+def test_scan_batch_limit(make_tree, tmp_path_factory):
+    root = make_tree(
+        {"a.bin": b"one", "b.bin": b"two", "c.bin": b"one", "d.bin": b"two"}
+    )
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = ScanConfig(
+        cache_path=cache,
+        image=False,
+        video=False,
+        audio=False,
+        docs=False,
+        batch_limit=2,
+    )
+    result = Scan(root, cfg).run()
+    assert result.stats["exact"]["hashed"] == 2
+    assert len(result.groups) == 0
+
+    result2 = Scan(root, cfg).run()
+    assert result2.stats["exact"]["hashed"] == 2
+    assert result2.stats["exact"]["cached"] == 2
+    assert len(result2.groups) == 2
+    result3 = Scan(root, cfg).run()
+    assert result3.stats["exact"]["hashed"] == 0
+    assert result3.stats["exact"]["cached"] == 4
+    assert len(result3.groups) == 2
+
+
+@VIDEO_SKIP
+def test_scan_cancel_resumes_video(tmp_path, tmp_path_factory):
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi",
+         "-i", "testsrc=size=640x480:rate=10", "-t", "20",
+         "-pix_fmt", "yuv420p", str(tmp_path / "big.mp4")],
+        check=True,
+    )
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi",
+         "-i", "testsrc=size=320x240:rate=10", "-t", "20",
+         "-pix_fmt", "yuv420p", str(tmp_path / "small.mp4")],
+        check=True,
+    )
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi",
+         "-i", "testsrc2=size=320x240:rate=10", "-t", "20",
+         "-pix_fmt", "yuv420p", str(tmp_path / "other.mp4")],
+        check=True,
+    )
+    cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
+    cfg = ScanConfig(cache_path=cache, image=False, audio=False, docs=False)
+    ev = mp.Event()
+
+    def maybe_cancel(stage, done, total):
+        if stage == "video" and done >= 1:
+            ev.set()
+
+    result = Scan(str(tmp_path), cfg, progress_cb=maybe_cancel, cancel_event=ev).run()
+    assert result.cancelled is True
+
+    result2 = Scan(str(tmp_path), cfg).run()
+    assert not result2.cancelled
+    assert result2.stats["video"]["hashed"] == 2
+    assert len(result2.groups) == 1

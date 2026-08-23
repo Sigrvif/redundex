@@ -59,9 +59,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.min_redundancy.setRange(0, 1000000)
         self.min_redundancy.setSuffix(" MB min")
         self.min_redundancy.valueChanged.connect(self._refilter)
+        self.batch_limit = QtWidgets.QSpinBox()
+        self.batch_limit.setRange(0, 1000000)
+        self.batch_limit.setSpecialValueText("no limit")
+        self.batch_limit.setPrefix("max new: ")
         filter_row = QtWidgets.QHBoxLayout()
         filter_row.addWidget(self.progress, 1)
         filter_row.addWidget(self.min_redundancy)
+        filter_row.addWidget(self.batch_limit)
         layout.addLayout(filter_row)
         layout.addWidget(self.stage_label)
 
@@ -120,6 +125,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.folder_edit.setText(d)
 
     def _config(self):
+        limit = self.batch_limit.value()
         return ScanConfig(
             exact=self.exact_check.isChecked(),
             image=self.image_check.isChecked(),
@@ -127,6 +133,7 @@ class MainWindow(QtWidgets.QMainWindow):
             video=self.video_check.isChecked(),
             audio=self.audio_check.isChecked(),
             docs=self.docs_check.isChecked(),
+            batch_limit=limit if limit > 0 else None,
         )
 
     def scan_sync(self):
@@ -175,7 +182,9 @@ class MainWindow(QtWidgets.QMainWindow):
             f"{len(result.groups)} group(s), {format_size(total)} redundant"
         )
         if result.cancelled:
-            self.status.setText(self.status.text() + " (cancelled)")
+            self.status.setText(
+                self.status.text() + " (paused - scan again to resume)"
+            )
 
     def _refilter(self, mb):
         self.model.set_min_redundancy(mb * 1024 * 1024)
