@@ -12,6 +12,19 @@ from .results_model import ResultsModel
 from .workers import ScanWorker
 
 
+class ResultsTree(QtWidgets.QTreeView):
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Space:
+            self.model().toggle_mark(self.currentIndex())
+            return
+        if event.key() in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
+            self.open_requested.emit(self.currentIndex())
+            return
+        super().keyPressEvent(event)
+
+    open_requested = QtCore.Signal(QtCore.QModelIndex)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -75,9 +88,11 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(self.stage_label)
 
         self.model = ResultsModel()
-        self.tree = QtWidgets.QTreeView()
+        self.tree = ResultsTree()
         self.tree.setModel(self.model)
+        self.tree.setUniformRowHeights(True)
         self.tree.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.model.modelReset.connect(self.tree.expandAll)
         layout.addWidget(self.tree, 1)
 
         row3 = QtWidgets.QHBoxLayout()
@@ -104,6 +119,8 @@ class MainWindow(QtWidgets.QMainWindow):
         problems_btn.clicked.connect(self._show_problems)
         self.tree.customContextMenuRequested.connect(self._context_menu)
         self.tree.doubleClicked.connect(self._open_clicked)
+        self.tree.open_requested.connect(self._open_clicked)
+        self.tree.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.tree.selectionModel().currentChanged.connect(self._preview_current)
         self._last_result = None
 

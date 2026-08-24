@@ -32,7 +32,8 @@ redundex
 ```
 
 Pick a folder, Scan, review groups (reason badges explain why files were grouped),
-mark files (right-click a group for "mark all but ..." helpers), then
+mark files (right-click a group for "mark all but ..." helpers, Space toggles
+the mark on the selected file, Enter opens it in the default player), then
 "Move marked..." to a collection folder. "Undo last move" restores the last batch.
 
 The preview pane shows images immediately and an "Open in default player"

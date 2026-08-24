@@ -1,4 +1,4 @@
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from redundex.gui.main_window import MainWindow
 
@@ -74,4 +74,58 @@ def test_double_click_opens_file(qtbot, monkeypatch):
     idx = win.model.index(0, 0, win.model.index(0, 0))
     win._open_clicked(idx)
     assert opened == ["/t/clip.mp4"]
+    win.close()
+
+
+def _one_group_result(path="/t/clip.mp4"):
+    from redundex.core.types import FileEntry, FileKind, Group, ScanResult
+
+    entry = FileEntry(path=path, size=5, mtime_ns=1, kind=FileKind.VIDEO)
+    group = Group(members=[entry], matches=[], redundancy=0)
+    return ScanResult(groups=[group], meta={})
+
+
+def test_groups_expanded_after_result(qtbot):
+    win = MainWindow()
+    qtbot.addWidget(win)
+    win.model.set_result(_one_group_result())
+    assert win.tree.isExpanded(win.model.index(0, 0))
+    win.model.set_min_redundancy(1000)
+    assert win.tree.model().rowCount() == 0
+    win.model.set_min_redundancy(0)
+    assert win.tree.isExpanded(win.model.index(0, 0))
+    win.close()
+
+
+def test_space_toggles_mark_on_current(qtbot):
+    win = MainWindow()
+    qtbot.addWidget(win)
+    win.model.set_result(_one_group_result())
+    child = win.model.index(0, 0, win.model.index(0, 0))
+    win.tree.setCurrentIndex(child)
+    qtbot.keyClick(win.tree, QtCore.Qt.Key_Space)
+    assert win.model.marked_paths() == ["/t/clip.mp4"]
+    qtbot.keyClick(win.tree, QtCore.Qt.Key_Space)
+    assert win.model.marked_paths() == []
+    win.close()
+
+
+def test_enter_opens_current_file(qtbot, monkeypatch):
+    import redundex.gui.main_window as mw_mod
+    from PySide6 import QtCore as _qc
+
+    opened = []
+    monkeypatch.setattr(mw_mod, "open_path", lambda p: opened.append(p) or True)
+    win = MainWindow()
+    qtbot.addWidget(win)
+    win.model.set_result(_one_group_result("/t/v.mp4"))
+    child = win.model.index(0, 0, win.model.index(0, 0))
+    win.tree.setCurrentIndex(child)
+    qtbot.keyClick(win.tree, _qc.Qt.Key_Return)
+    assert opened == ["/t/v.mp4"]
+    opened.clear()
+    group_idx = win.model.index(0, 0)
+    win.tree.setCurrentIndex(group_idx)
+    qtbot.keyClick(win.tree, _qc.Qt.Key_Enter)
+    assert opened == []
     win.close()
