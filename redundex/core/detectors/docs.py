@@ -17,17 +17,20 @@ def normalize_text(text):
 def doc_job(path):
     ext = os.path.splitext(path)[1].lower()
     if ext == ".pdf":
-        import pymupdf
+        import pypdfium2 as pdfium
 
-        doc = pymupdf.open(path)
-        norm = normalize_text("".join(page.get_text() for page in doc))
-        if norm:
-            return path, blake3.blake3(norm.encode("utf-8", "replace")).hexdigest(), None
-        page = doc[0]
-        matrix = pymupdf.Matrix(32 / page.rect.width, 32 / page.rect.height)
-        pix = page.get_pixmap(matrix=matrix, colorspace=pymupdf.csGRAY)
-        gray = numpy.frombuffer(pix.samples, dtype=numpy.uint8).reshape(32, 32)
-        return path, None, phash_gray(gray.astype(numpy.float64))
+        doc = pdfium.PdfDocument(path)
+        try:
+            norm = normalize_text("".join(
+                page.get_textpage().get_text_range() for page in doc
+            ))
+            if norm:
+                return path, blake3.blake3(norm.encode("utf-8", "replace")).hexdigest(), None
+            pil = doc[0].render(scale=4, grayscale=True).to_pil().resize((32, 32))
+            gray = numpy.asarray(pil, dtype=numpy.uint8)
+            return path, None, phash_gray(gray.astype(numpy.float64))
+        finally:
+            doc.close()
     if ext in _TXT_EXTS:
         with open(path, encoding="utf-8", errors="replace") as f:
             norm = normalize_text(f.read())

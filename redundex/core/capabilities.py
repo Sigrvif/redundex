@@ -7,7 +7,7 @@ def check_capabilities():
     return {
         "video": bool(tools.which("ffmpeg") and tools.which("ffprobe")),
         "audio": bool(tools.which("fpcalc")),
-        "pdf": importlib.util.find_spec("pymupdf") is not None,
+        "pdf": importlib.util.find_spec("pypdfium2") is not None,
     }
 
 

@@ -3,6 +3,7 @@ import os
 import shutil
 import subprocess
 import zipfile
+from pathlib import Path
 
 import numpy
 import pytest
@@ -173,19 +174,10 @@ def test_scan_video_stage(tmp_path, tmp_path_factory):
 
 
 def test_scan_docs_stage(tmp_path, tmp_path_factory):
-    import pymupdf
-
-    doc = pymupdf.open()
-    page = doc.new_page(width=300, height=200)
-    page.insert_text((20, 40), "Redundant document content")
-    doc.save(str(tmp_path / "a.pdf"))
-    doc.close()
-    doc = pymupdf.open()
-    page = doc.new_page(width=500, height=400)
-    page.insert_text((80, 90), "Redundant   DOCUMENT\ncontent")
-    doc.save(str(tmp_path / "b.pdf"))
-    doc.close()
-    (tmp_path / "c.txt").write_text("redundantdocumentcontent")
+    fixtures = Path(__file__).parent / "fixtures"
+    shutil.copyfile(fixtures / "pdf-text-a.pdf", tmp_path / "a.pdf")
+    shutil.copyfile(fixtures / "pdf-text-b.pdf", tmp_path / "b.pdf")
+    (tmp_path / "c.txt").write_text("helloredundantworld")
     cache = str(tmp_path_factory.mktemp("cache") / "c.sqlite")
     cfg = ScanConfig(cache_path=cache, image=False, video=False, audio=False)
     result = Scan(str(tmp_path), cfg).run()
