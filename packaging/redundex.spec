@@ -2,7 +2,7 @@ a = Analysis(
     ["entry.py"],
     pathex=[".."],
     binaries=[],
-    datas=[("tools/linux", "tools")],
+    datas=[("tools/linux", "tools"), ("licenses", "licenses"), ("../THIRD-PARTY-NOTICES.md", "."), ("../LICENSE", ".")],
     hiddenimports=["PySide6.QtSvg"],
     hookspath=[],
     runtime_hooks=[],
