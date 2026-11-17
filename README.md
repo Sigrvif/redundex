@@ -102,4 +102,13 @@ to force a full rescan.
 ```
 
 Bundle `ffmpeg.exe`, `ffprobe.exe`, `fpcalc.exe` next to the built executable or
-keep them on PATH. Note ffmpeg/fpcalc licensing (GPL/LGPL) when distributing.
+keep them on PATH.
+
+## License
+
+Copyright (c) 2026 Shisaye.
+
+MIT — see [LICENSE](LICENSE). The bundled native tools (ffmpeg/ffprobe,
+GPL-2-or-later; fpcalc, LGPL-2.1-or-later) and Python dependencies keep their
+own licenses, listed with sources in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md);
+note their copyleft terms when redistributing builds.
